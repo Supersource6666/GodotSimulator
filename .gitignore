@@ -2,3 +2,11 @@ cesium_token.txt
 .godot/
 appdata/
 *.log
+
+# Offline assets are distributed separately; keep manifests and build scripts.
+/offline_data/models/
+/offline_data/sources/
+
+# Python bytecode caches.
+__pycache__/
+*.py[cod]

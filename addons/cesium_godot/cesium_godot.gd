@@ -38,6 +38,8 @@ var token_panel_data : TokenPanelData = null
 
 func _enter_tree() -> void:
 	self.set_process(false)
+	if OS.get_environment("GODOT_OFFLINE_IMPORT") == "1":
+		return
 	self.docked_scene = editorAddon.instantiate()
 	add_control_to_dock(EditorPlugin.DOCK_SLOT_RIGHT_UL, self.docked_scene)
 	self.set_session_buttons_enabled(false)
@@ -57,6 +59,8 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
+	if self.docked_scene == null:
+		return
 	print("Disabled Cesium plugin")
 	remove_control_from_docks(self.docked_scene)
 	self.docked_scene.free()
@@ -133,7 +137,7 @@ func on_georef_checked(is_checked: bool) -> void:
 	self.cesium_builder_node.use_georeferences = is_checked
 
 func add_tileset():
-	self.cesium_builder_node.instantiate_tileset(CesiumAssetBuilder.TILESET_TYPE.Blank, "")
+	self.cesium_builder_node.instantiate_tileset(CesiumAssetBuilder.TILESET_TYPE.Blank, "", "Blank")
 
 func create_dynamic_camera():
 	print("Create dynamic camera!")
@@ -198,7 +202,7 @@ func create_ion_button(assetId: int, name: String, type: String) -> Button:
 	hbox.add_child(button)
 	# Connect with the signal
 	button.pressed.connect(func():
-		self.cesium_builder_node.instantiate_tileset(assetId, type)
+		self.cesium_builder_node.instantiate_tileset(assetId, type, name)
 	)
 	return button
 

@@ -1,0 +1,107 @@
+*** Begin Patch
+*** Update File: cesium_godot/Utils/CurlHttpClient.h
+@@
+-using HighLevelResponseCallback_t = std::function<void(int32_t, const PackedByteArray&)>;
+ using CesiumHeader_t = std::pair<std::string, std::string>;
++using HighLevelResponseCallback_t = std::function<void(int32_t, const PackedByteArray&, const std::vector<CesiumHeader_t>&)>;
+@@
+     void init_client(size_t maxThreads) { m_threadPool.init(maxThreads); }
++    using LegacyCallback = std::function<void(int32_t, const PackedByteArray&)>;
++    void send_get(const char* url, const LegacyCallback& cb, const std::vector<CesiumHeader_t>& headers) {
++        send_request(url, HTTPClient::METHOD_GET, [cb](int32_t status, const PackedByteArray& body, const std::vector<CesiumHeader_t>&) { cb(status, body); }, headers);
++    }
++    void send_get_same_thread(const char* url, const LegacyCallback& cb, const std::vector<CesiumHeader_t>& headers) {
++        send_request_same_thread(url, HTTPClient::METHOD_GET, [cb](int32_t status, const PackedByteArray& body, const std::vector<CesiumHeader_t>&) { cb(status, body); }, headers);
++    }
+@@
+-        PackedByteArray body = pull_url(url, method, status, headers);
+-        cb(static_cast<int32_t>(status), body);
++        std::vector<CesiumHeader_t> responseHeaders;
++        PackedByteArray body = pull_url(url, method, status, headers, responseHeaders);
++        cb(static_cast<int32_t>(status), body, responseHeaders);
+@@
+-    PackedByteArray pull_url(const char* url, HTTPClient::Method method, long& status, const std::vector<CesiumHeader_t>& headers) {
++    struct HeaderCapture {
++        std::vector<CesiumHeader_t>* headers;
++        PackedByteArray* body;
++    };
++    static size_t header_callback(char* data, size_t size, size_t count, void* user) {
++        const size_t bytes = size * count;
++        auto& capture = *static_cast<HeaderCapture*>(user);
++        std::string line(data, bytes);
++        // Redirects, CONNECT and informational responses are separate blocks.
++        // Only the final response's headers and body belong in the cache.
++        if (line.rfind("HTTP/", 0) == 0) {
++            capture.headers->clear();
++            capture.body->clear();
++            return bytes;
++        }
++        const auto colon = line.find(':');
++        if (colon == std::string::npos) return bytes;
++        std::string name = line.substr(0, colon);
++        for (char& c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
++        std::string value = line.substr(colon + 1);
++        const auto first = value.find_first_not_of(" \t\r\n");
++        if (first == std::string::npos) value.clear();
++        else value = value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
++        for (auto& h : *capture.headers) {
++            if (h.first == name) { h.second += ", " + value; return bytes; }
++        }
++        capture.headers->emplace_back(std::move(name), std::move(value));
++        return bytes;
++    }
++    PackedByteArray pull_url(const char* url, HTTPClient::Method method, long& status, const std::vector<CesiumHeader_t>& headers, std::vector<CesiumHeader_t>& responseHeaders) {
+@@
+         for (int attempt=0; attempt<maxAttempts; ++attempt) {
+             buffer.clear();
++            responseHeaders.clear();
++            HeaderCapture capture{&responseHeaders, &buffer};
+@@
+             curl_easy_setopt(handle, CURLOPT_WRITEDATA, &buffer);
++            curl_easy_setopt(handle, CURLOPT_HEADERFUNCTION, &CurlHttpClient::header_callback);
++            curl_easy_setopt(handle, CURLOPT_HEADERDATA, &capture);
++            curl_easy_setopt(handle, CURLOPT_HTTP_CONTENT_DECODING, 0L);
+@@
+             buffer.clear();
++            responseHeaders.clear();
+*** Update File: cesium_godot/Implementations/NetworkAssetAccessor.cpp
+@@
+-	int32_t idx = -1;
++	int32_t idx = 0;
+@@
+-			[url, p_promise = std::move(p_promise)](int32_t responseCode, const PackedByteArray &body) mutable {
++			[url, method, requestHeaders = headers, p_promise = std::move(p_promise)](int32_t responseCode, const PackedByteArray &body, const std::vector<CesiumHeader_t>& responseHeaders) mutable {
+@@
+-					const char *strPtr = reinterpret_cast<const char *>(body.ptr());
+-					String bodyStr = strPtr;
+-					ERR_PRINT(errorMessage + String("\nURL: ") + String(url.c_str()) + String("\nFailed request's body: ") + bodyStr);
++					ERR_PRINT(errorMessage); // No signed URL or unterminated response body.
+@@
+ 				std::string contentType = "application/octet-stream";
+-				CesiumAsync::HttpHeaders headers = { { "content-type", contentType } };
++				CesiumAsync::HttpHeaders headers(responseHeaders.begin(), responseHeaders.end());
++				const auto type = headers.find("content-type");
++				if (type != headers.end()) contentType = type->second;
++				CesiumAsync::HttpHeaders sentHeaders(requestHeaders.begin(), requestHeaders.end());
++				static const char* methodNames[] = {"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS", "TRACE", "CONNECT", "PATCH"};
+@@
+-						"GET",
++						methodNames[static_cast<int>(method)],
+ 						url,
+-						headers,
++						sentHeaders,
+*** Update File: cesium_godot/Implementations/GodotPrepareRenderResources.cpp
+@@
+ #include <godot_cpp/classes/mesh_instance3d.hpp>
++#include <godot_cpp/classes/triangle_mesh.hpp>
++#include <godot_cpp/classes/project_settings.hpp>
+@@
+-		Cesium3DTile* instance = memnew(Cesium3DTile);
++		// This mesh is still exclusively owned by the load task. Populate its
++		// query BVH before publishing it to the scene, not on a render frame.
++		if (ProjectSettings::get_singleton()->get_setting("cesium/prepare_query_meshes", false)) {
++			Ref<TriangleMesh> queryMesh = meshData->generate_triangle_mesh();
++			meshData->set_meta("preview_bvh_ready", queryMesh.is_valid());
++		}
++		Cesium3DTile* instance = memnew(Cesium3DTile);
+*** End Patch
