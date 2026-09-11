@@ -26,8 +26,8 @@ func conform(route: PackedVector3Array, space: PhysicsDirectSpaceState3D) -> Pac
 		forward.y = 0.0
 		var right := forward.normalized().cross(Vector3.UP)
 		var ground_y := -INF
-		# Cover both slab edges as well as the train centreline.
-		for offset in [-6.0, -4.2, -2.4, 0.0, 1.8]:
+		# Cover the single 3.6 m slab edges and the train centreline.
+		for offset in [-1.8, 0.0, 1.8]:
 			var point := route[i] + right * float(offset)
 			var ray := PhysicsRayQueryParameters3D.create(
 				Vector3(point.x, 1000.0, point.z), Vector3(point.x, -1000.0, point.z), TERRAIN_LAYER)

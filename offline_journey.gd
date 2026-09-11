@@ -264,12 +264,6 @@ func _build_offline_corridor() -> void:
 	corridor.add_child(track)
 	track.set_custom_samples(samples)
 	track.generate_track_mesh()
-	# Keep the train route fixed; place the other line on its left.
-	var parallel = TRACK_GENERATOR_SCRIPT.new()
-	parallel.name = "ParallelTrack"
-	corridor.add_child(parallel)
-	parallel.set_custom_samples(TRACK_GENERATOR_SCRIPT.offset_samples(samples, -4.2))
-	parallel.generate_track_mesh()
 	var overhead = CATENARY_GENERATOR_SCRIPT.new()
 	corridor.add_child(overhead)
 	overhead.build(distances[-1], _route_pose_sample)
