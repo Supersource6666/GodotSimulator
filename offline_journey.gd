@@ -6,17 +6,19 @@ const MANIFEST := "res://offline_data/manifest.json"
 const SPEED := 285.0 / 3.6
 # 离线桥/轨视觉层：由参考工程的生成器最小适配而来。
 const TRACK_GENERATOR_SCRIPT := preload("res://assets/procedural/track_generator.gd")
-const BRIDGE_MANAGER_SCRIPT := preload("res://assets/procedural/bridge_manager.gd")
 const CATENARY_GENERATOR_SCRIPT := preload("res://assets/procedural/catenary_generator.gd")
 const CORRIDOR_SAMPLE_STEP := 2.0   # 更密的桥轨采样，保留平滑路径的小曲率变化
-const CORRIDOR_GROUND_OFFSET := 8.0 # 桥面样本点到虚构地面的距离（米）
 const TOWER_HEIGHT_M := 92.0        # 瞭望塔相机相对轨面的高度
 const TOWER_REACH_M := 360.0        # 瞭望方向沿线路前视距离
 const TRACKING_CAMERA_FORWARD_M := 100.0  # 沿实际轨道前方取相机机位，避免弯道切线偏离
 const TRACKING_CAMERA_HEIGHT_M := 24.0    # 前侧方低机位，受阻时自动升高
 const TRACKING_CAMERA_SIDE_M := 22.0
 const TRACKING_CAMERA_LOOK_BACK_M := 8.0  # 跟踪视角相机回看的落点（相对列车锚点，向后）
-const ROUTE_TANGENT_DELTA_M := 4.0  # 视觉采样(桥/轨/接触网)朝向的切线基线；±0.8m 太短会放大 1m 级点位抖动
+const ROUTE_TANGENT_DELTA_M := 4.0
+const CAB_EYE_HEIGHT_M := 3.15
+const CAB_MILE_OFFSET_M := 51.0
+const CAB_LOOK_AHEAD_M := 160.0
+# 视觉采样（桥/轨/接触网）朝向的切线基线；过短会放大点位抖动。
 var route := PackedVector3Array()
 var distances := PackedFloat64Array()
 var assets: Array = []
@@ -33,6 +35,8 @@ var elapsed := 0.0
 var max_process_ms := 0.0
 var test_frames := 0
 var camera: Camera3D
+var cab_interior: Node3D
+var cab_view := false
 var train: Node3D
 var label: Label
 var panel: PanelContainer
@@ -48,10 +52,12 @@ var vantage := -1
 var camera_guard := preload("res://camera_obstacle_guard.gd").new()
 var camera_collisions_ready := false
 var camera_collision_setup_started := false
+var ground_track := preload("res://ground_track.gd").new()
 
 func _ready() -> void:
 	started_ms = Time.get_ticks_msec()
 	loop_enabled = "--offline-loop" in OS.get_cmdline_user_args()
+	cab_view = "--cab-view" in OS.get_cmdline_user_args()
 	_setup_scene()
 	if not FileAccess.file_exists(MANIFEST):
 		_fail("本地资源尚未制作，请先运行 build-offline.ps1。")
@@ -93,7 +99,7 @@ func _ready() -> void:
 	_update_position()
 	_refresh_ui()
 	# 桥/轨视觉层在首帧内构建（不阻塞资源异步加载）。
-	_route_visual_setup.call_deferred()
+	# Build tracks only after the local terrain is available for height sampling.
 
 func _route_visual_setup() -> void:
 	if corridor == null:
@@ -137,6 +143,10 @@ func _setup_scene() -> void:
 	camera.fov = 48.0
 	camera.current = true
 	add_child(camera)
+	cab_interior = load("res://cab_interior.gd").new()
+	cab_interior.name = "CabInterior"
+	cab_interior.visible = false
+	camera.add_child(cab_interior)
 	var canvas := CanvasLayer.new()
 	add_child(canvas)
 	panel = PanelContainer.new()
@@ -190,6 +200,8 @@ func _load_step() -> void:
 			add_child(instance)
 			if not path.get_file().begins_with("ground_"):
 				camera_guard.add_buildings(instance)
+			else:
+				ground_track.add_terrain(instance)
 			for mesh in instance.find_children("*", "MeshInstance3D", true, false):
 				mesh.visibility_range_end = 1800.0
 				mesh.visibility_range_end_margin = 150.0
@@ -223,6 +235,12 @@ func _finish_camera_collision_setup() -> void:
 	# Allow the physics server to register the final building colliders.
 	await get_tree().physics_frame
 	await get_tree().physics_frame
+	var grounded := ground_track.conform(route, get_world_3d().direct_space_state)
+	if grounded.is_empty():
+		_fail("地面轨道采样失败：沿线地形缺失。")
+		return
+	route = grounded
+	_route_visual_setup()
 	camera_collisions_ready = true
 	print("CAMERA_COLLIDERS_READY meshes=", camera_guard.collision_meshes,
 		" max_build_ms=", camera_guard.max_collider_build_ms)
@@ -252,12 +270,6 @@ func _build_offline_corridor() -> void:
 	corridor.add_child(parallel)
 	parallel.set_custom_samples(TRACK_GENERATOR_SCRIPT.offset_samples(samples, -4.2))
 	parallel.generate_track_mesh()
-	var bridge = BRIDGE_MANAGER_SCRIPT.new()
-	corridor.add_child(bridge)
-	bridge.virtual_ground_offset_m = CORRIDOR_GROUND_OFFSET
-	# space_state = null → 桥生成器自动走“虚构地面”分支，不做物理射线。
-	# A 12 m deck centered between the tracks leaves 2.1 m outside each bed.
-	bridge.build_bridge(TRACK_GENERATOR_SCRIPT.offset_samples(samples, -2.1), distances[-1], corridor, null)
 	var overhead = CATENARY_GENERATOR_SCRIPT.new()
 	corridor.add_child(overhead)
 	overhead.build(distances[-1], _route_pose_sample)
@@ -425,6 +437,25 @@ func _update_position(delta: float = 0.0) -> void:
 	train.position = point
 	train.look_at(point + heading, Vector3.UP)
 	train.anchor_distance = mileage
+	train.set_cab_view(cab_view)
+	cab_interior.visible = cab_view
+	camera.near = 0.08 if cab_view else 0.5
+	camera.fov = 64.0 if cab_view else 48.0
+	if cab_view:
+		camera_guard.blocked = false
+		camera_guard.adjusted = false
+		camera_guard.partial_view = false
+		var cab_distance := clampf(mileage + CAB_MILE_OFFSET_M, 0.0, distances[-1])
+		var cab_pose := _route_pose_sample(cab_distance, CAB_EYE_HEIGHT_M)
+		var target_distance := minf(cab_distance + CAB_LOOK_AHEAD_M, distances[-1])
+		var target: Vector3
+		if target_distance > cab_distance + 0.1:
+			target = _route_pose_sample(target_distance, 2.4).point
+		else:
+			target = cab_pose.point + cab_pose.forward * CAB_LOOK_AHEAD_M
+		camera.position = cab_pose.point
+		camera.look_at(target, cab_pose.up)
+		return
 	if vantage >= 0 and vantage < vantages.size():
 		var v: Dictionary = vantages[vantage]
 		if not camera_collisions_ready or camera_guard.clear_view(get_world_3d().direct_space_state,
@@ -453,23 +484,36 @@ func _update_position(delta: float = 0.0) -> void:
 	# A fully shortened camera may look straight down at the route endpoint.
 	camera.look_at(aim, heading if absf(direction.dot(Vector3.UP)) > 0.98 else Vector3.UP)
 
+func _set_cab_view(enabled: bool) -> void:
+	cab_view = enabled
+	vantage = -1
+	camera_guard.blocked = false
+	camera_guard.initialized = false
+	if train != null:
+		train.set_cab_view(enabled)
+	if cab_interior != null:
+		cab_interior.visible = enabled
+	_update_position()
+	_refresh_ui()
+
 func _refresh_ui() -> void:
 	var status := "整段资源已就绪" if ready_for_trip else "本地资源准备中，列车等待"
 	if paused:
 		status = "已暂停" if mileage < distances[-1] else "已到达品川"
 	elif loop_enabled:
 		status = "循环运行中（第 %d 圈）" % (loop_count + 1)
-	var view_text := "跟踪视角"
-	if camera_guard.blocked:
-		status = "建筑遮挡，已停止前进；Space 重试 / V 换视角"
-	elif camera_guard.adjusted:
-		view_text = "跟踪视角（建筑避障）"
-	if camera_guard.partial_view:
-		view_text = "跟踪视角（部分车厢经过遮挡物）"
-	if ready_for_trip and vantage >= 0 and vantage < vantages.size():
-		view_text = "瞭望：" + str(vantages[vantage]["name"])
+	var view_text := "驾驶室司机视角" if cab_view else "跟踪视角"
+	if not cab_view:
+		if camera_guard.blocked:
+			status = "建筑遮挡，已停止前进；Space 重试 / V 换视角"
+		elif camera_guard.adjusted:
+			view_text = "跟踪视角（建筑避障）"
+		if camera_guard.partial_view:
+			view_text = "跟踪视角（部分车厢经过遮挡物）"
+		if ready_for_trip and vantage >= 0 and vantage < vantages.size():
+			view_text = "瞭望：" + str(vantages[vantage]["name"])
 	var loop_text := "循环：开" if loop_enabled else "循环：关"
-	label.text = "东海道新干线 · 东京 → 品川 · 本地版\n里程：%.2f / %.2f km    速度：285 km/h\n范围：轨道两侧各 500 m    航空影像：Z18\n资源：%d / %d    状态：%s    循环：%s\n视角：%s\nSpace：暂停/继续    R：重新预览    V：切换瞭望视角    L：切换循环\n无需网络／无需 Cesium Token（命令行加 --offline-loop 启动即循环）" % [mileage / 1000, distances[-1] / 1000, loaded, assets.size(), status, loop_text, view_text]
+	label.text = "东海道新干线 · 东京 → 品川 · 本地版\n里程：%.2f / %.2f km    速度：285 km/h\n范围：轨道两侧各 500 m    航空影像：Z18\n资源：%d / %d    状态：%s    循环：%s\n视角：%s\nSpace：暂停/继续    R：重新预览    C：驾驶室视角    V：切换瞭望视角    L：切换循环\n无需网络／无需 Cesium Token（命令行加 --offline-loop 启动即循环）" % [mileage / 1000, distances[-1] / 1000, loaded, assets.size(), status, loop_text, view_text]
 	progress.value = 100.0 * mileage / distances[-1] if ready_for_trip else 100.0 * loaded / max(1, assets.size())
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -485,13 +529,17 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if not ready_for_trip:
 		return
-	if event.keycode == KEY_SPACE:
+	if event.keycode == KEY_C:
+		_set_cab_view(not cab_view)
+	elif event.keycode == KEY_SPACE:
 		paused = not paused
 	elif event.keycode == KEY_R:
 		mileage = 0.0
 		paused = false
 		_update_position()
 	elif event.keycode == KEY_V:
+		if cab_view:
+			_set_cab_view(false)
 		vantage += 1
 		if vantage >= vantages.size():
 			vantage = -1
@@ -543,7 +591,8 @@ func _test_position(distance: float) -> void:
 func capture() -> void:
 	await RenderingServer.frame_post_draw
 	var image := get_viewport().get_texture().get_image()
-	var error := image.save_png("res://offline-preview.png")
-	print("OFFLINE_CAPTURE ", error, " moving_script_max_ms=", max_process_ms,
+	var capture_path := "res://cab-preview.png" if cab_view else "res://offline-preview.png"
+	var error := image.save_png(capture_path)
+	print("OFFLINE_CAPTURE path=", capture_path, " error=", error, " moving_script_max_ms=", max_process_ms,
 		" video_memory_bytes=", Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED))
 	get_tree().quit(0)

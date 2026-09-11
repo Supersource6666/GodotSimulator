@@ -62,10 +62,11 @@ Last-Modified 等规则复用或重新验证资源，不强行缓存 no-store、
 验证：python tests/cache_inventory.py
 仅输出缓存数量与容量，不输出签名 URL。
 
-Windows 推荐执行 `powershell -File .\run-preview.ps1`。启动器会将已经配置的系统代理传给插件的 libcurl 下载器，不修改系统代理设置。`-Terrain` 切回航拍地形模式，`-SmokeTest` 执行 30 秒无界面加载测试，`-GodotPath` 指定其他引擎路径。直接从未继承代理环境的编辑器运行，Google 数据可能无法下载。
+Windows 推荐执行 `powershell -File .\run-preview.ps1`。启动器会将已经配置的系统代理传给插件的 libcurl 下载器，不修改系统代理设置。`-Terrain` 切回航拍地形模式，`-SmokeTest` 执行 30 秒无界面加载测试，`-GodotPath` 指定其他引擎路径，`-Cab` 可直接从驾驶室视角启动。直接调用 Godot 时也可在 `--` 后传入 `--cab-view`。直接从未继承代理环境的编辑器运行，Google 数据可能无法下载。
 
 - `Space`：暂停/继续
 - `R`：重新预览东京到品川
+- `C`：在轨道跟车视角与驾驶室司机视角之间切换；司机视角位于头车驾驶位高度，使用 64° 视野
 
 路线已改为真实轨道折线（170 个连通节点，约 6.7 km），不再连接两站中心走直线。轨道 © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright)，ODbL；离线快照及重建说明在 assets/route。该路线是可视化选线，不是行车调度数据。
 
@@ -74,5 +75,7 @@ Windows 推荐执行 `powershell -File .\run-preview.ps1`。启动器会将已�
 启动时对视野内 9 个位置进行带纹理三角形相交检测，只认可射线最前面的可见表面，不能用被粗模挡住的细瓦片充数。实景瓦片还必须具有 ≤8.1 m 的几何误差元数据；至少 7 个位置连续覆盖 5 秒、列车加载完成后才前进。运行中每秒复查，覆盖不足则停止等待。每前进 500 m 还会等待瓦片稳定。这是近景最低门槛，不代表最高精度 LOD，也不覆盖所有屏幕像素。
 
 当前插件在地理参考模式下按地理原点选择瓦片，因此脚本让地理原点跟随相机，局部相机位置保持为零。`forbid_holes` 用于等待子瓦片时保留父瓦片。原生插件的资源释放警告仍需单独诊断，不能视为已经修复。
+
+司机视角验证：`Godot --headless --path . --script res://tests/cab_view.gd`。
 
 验证命令：`Godot --headless --path . --script res://tests/preview_configuration.gd`；数据加载测试：`Godot --headless --path . -- --demo-smoke-test`。

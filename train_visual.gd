@@ -61,6 +61,16 @@ func set_anchor_distance(distance: float) -> void:
 	anchor_distance = distance
 
 
+
+func set_cab_view(enabled: bool) -> void:
+	# The imported lead car is an exterior shell with opaque glazing and no cab.
+	# Hide only that shell while the camera uses the camera-local cab interior.
+	if cars.is_empty():
+		return
+	for child in cars[0].get_children():
+		if child.has_meta("model_path"):
+			child.visible = not enabled
+
 func _build_consist() -> void:
 	# 首尾驾驶车，中间两辆；只反转尾车车壳，保持轮对贴轨姿态。
 	var front_offset := float(CONSIST_CAR_COUNT - 1) * 0.5 * CAR_CENTER_SPACING_M

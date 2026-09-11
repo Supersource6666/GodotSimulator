@@ -13,6 +13,10 @@ const PROFILE_WINDOW_M := 120.0
 ## 二次角部按参数 t 取样会在顶点附近造成点距不均（0.4~2 m），这里统一成
 ## 均匀 1 m 点距——消除“1 m 尺度”的点位抖动/不匀，避免视觉层按点索引取样本时出现跳动。
 const RESAMPLE_STEP_M := 1.0
+## Filter by distance, not source vertex density. Broad transitions remove the
+## short alternating bends that remain after local corner rounding.
+const PLAN_SIGMA_M := 30.0
+const PLAN_RADIUS_M := 90.0
 
 static func smooth(source: PackedVector3Array) -> PackedVector3Array:
 	if source.size() < 3:
@@ -37,7 +41,39 @@ static func smooth(source: PackedVector3Array) -> PackedVector3Array:
 			var t := float(step) / steps
 			result.append(a.lerp(point, t).lerp(point.lerp(b, t), t))
 	result.append(profiled[-1])
-	return _resample_uniform(result, RESAMPLE_STEP_M)
+	return _resample_uniform(_smooth_plan(_resample_uniform(result, RESAMPLE_STEP_M)), RESAMPLE_STEP_M)
+
+
+static func _smooth_plan(points: PackedVector3Array) -> PackedVector3Array:
+	var result := points.duplicate()
+	var radius := ceili(PLAN_RADIUS_M / RESAMPLE_STEP_M)
+	var weights := PackedFloat64Array()
+	var weight_sum := 0.0
+	for offset in range(-radius, radius + 1):
+		var weight := exp(-0.5 * pow(offset * RESAMPLE_STEP_M / PLAN_SIGMA_M, 2.0))
+		weights.append(weight)
+		weight_sum += weight
+	var last := points.size() - 1
+	for i in range(1, last):
+		# Accumulate local offsets in double precision, avoiding float32
+		# cancellation at city-scale coordinates. Reflect around endpoints
+		# so station positions stay fixed without a clamped-end kink.
+		var dx := 0.0
+		var dz := 0.0
+		for offset in range(-radius, radius + 1):
+			var j := i + offset
+			var point: Vector3
+			if j < 0:
+				point = points[0] * 2.0 - points[mini(-j, last)]
+			elif j > last:
+				point = points[last] * 2.0 - points[maxi(2 * last - j, 0)]
+			else:
+				point = points[j]
+			var weight := weights[offset + radius]
+			dx += float(point.x - points[i].x) * weight
+			dz += float(point.z - points[i].z) * weight
+		result[i] = Vector3(points[i].x + dx / weight_sum, points[i].y, points[i].z + dz / weight_sum)
+	return result
 
 
 ## 沿水平里程对高程做高斯加权低通；首末点与 XZ 坐标保持不变。
@@ -82,7 +118,7 @@ static func _resample_uniform(points: PackedVector3Array, step: float) -> Packed
 	var total := chain[count - 1]
 	var out := PackedVector3Array([points[0]])
 	var target := step
-	var index := 1
+	var index := 0
 	while target < total - 0.5 * step:
 		while index < count - 1 and chain[index + 1] < target:
 			index += 1

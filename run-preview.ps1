@@ -1,9 +1,10 @@
 param(
-    [string]$GodotPath = 'E:\Godot_v4.7\Godot_v4.7-stable_win64_console.exe',
+    [string]$GodotPath = 'C:\GodotEngine\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe',
     [switch]$SmokeTest,
     [switch]$Terrain,
     [switch]$Local,
-    [switch]$Loop
+    [switch]$Loop,
+    [switch]$Cab
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,6 +30,7 @@ try {
     if ($SmokeTest) { $previewArgs += '--demo-smoke-test' }
     if ($Terrain) { $previewArgs += '--terrain-preview' }
     if ($Loop) { $previewArgs += '--offline-loop' }
+    if ($Cab) { $previewArgs += '--cab-view' }
     # Native plugin errors may contain signed URLs. Redact query strings.
     $ErrorActionPreference = 'Continue'
     & $GodotPath @previewArgs 2>&1 | ForEach-Object {

@@ -182,11 +182,20 @@ class Glb:
         return index
     def accessor(self, data, kind, integer=False):
         data = np.asarray(data, dtype="<u4" if integer else "<f4")
+
+        if kind == "SCALAR":
+            data = data.reshape(-1)
+
         index = len(self.j["accessors"])
-        item = {"bufferView": self.view(data.tobytes()), "componentType": 5125 if integer else 5126,
-                "count": len(data), "type": kind}
+        item = {
+            "bufferView": self.view(data.tobytes()),
+            "componentType": 5125 if integer else 5126,
+            "count": len(data),
+            "type": kind,
+        }
         if kind == "VEC3":
             item.update(min=data.min(0).tolist(), max=data.max(0).tolist())
+
         self.j["accessors"].append(item)
         return index
     def write(self, path):
@@ -281,7 +290,7 @@ def convert_building(item):
         p = p[used]
         all_positions.append(p)
         out = {"attributes": {"POSITION": g.accessor(p, "VEC3")},
-               "indices": g.accessor(inverse.astype(np.uint32), "SCALAR", True),
+               "indices": g.accessor(inverse.astype(np.uint32).reshape(-1), "SCALAR", True),
                "material": primitive.get("material", 0)}
         for name in ("NORMAL", "TEXCOORD_0", "COLOR_0"):
             if name in attrs:

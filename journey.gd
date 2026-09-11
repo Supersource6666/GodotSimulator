@@ -13,6 +13,9 @@ const CAMERA_HEIGHT_METERS := 65.0
 const CAMERA_TRAILING_DISTANCE_METERS := 85.0
 const CAMERA_LOOK_AHEAD_METERS := 8.0
 const ROUTE_DIRECTION_SAMPLE_METERS := 12.0
+const CAB_EYE_HEIGHT_METERS := 3.15
+const CAB_MILE_OFFSET_METERS := 51.0
+const CAB_LOOK_AHEAD_METERS := 160.0
 # OSM supplies horizontal alignment, not surveyed rail elevation.
 const DEFAULT_RAIL_ELLIPSOID_HEIGHT := 46.0
 var _rail_height := DEFAULT_RAIL_ELLIPSOID_HEIGHT
@@ -32,6 +35,8 @@ const MAX_NEAR_GEOMETRIC_ERROR_METERS := 8.1
 var _route_georeference: CesiumGeoreference
 var _origin_ecef := Vector3.ZERO
 var _route_camera: Camera3D
+var _cab_interior: Node3D
+var _cab_view := false
 var _buildings_tileset: Cesium3DTileset
 var _trip_label: Label
 var _progress_bar: ProgressBar
@@ -72,7 +77,10 @@ func _ready() -> void:
 	_train = load("res://train_visual.gd").new()
 	_train.name = "PreviewTrain"
 	add_child(_train)
-	_update_route_position(0.0)
+	if "--cab-view" in OS.get_cmdline_user_args():
+		_set_cab_view(true)
+	else:
+		_update_route_position(0.0)
 	print("Tokaido preview: Tokyo -> Shinagawa, distance=", roundi(_total_route_distance / 1000.0), " km")
 
 
@@ -191,6 +199,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_next_preload_distance = ROUTE_PRELOAD_INTERVAL_METERS
 				_update_route_position(0.0)
 				_status_label.text = "状态：已返回东京，等待起点瓦片稳定"
+			KEY_C:
+				_set_cab_view(not _cab_view)
 			KEY_PLUS, KEY_KP_ADD, KEY_EQUAL:
 				_time_scale = minf(_time_scale * 1.25, 1.0)
 				_update_trip_label(_find_route_segment(_journey_distance))
@@ -198,6 +208,22 @@ func _unhandled_input(event: InputEvent) -> void:
 				_time_scale = maxf(_time_scale / 1.25, 1.0)
 				_update_trip_label(_find_route_segment(_journey_distance))
 
+
+func _set_cab_view(enabled: bool) -> void:
+	_cab_view = enabled
+	if _cab_interior != null:
+		_cab_interior.visible = enabled
+	if _train != null and _train.has_method("set_cab_view"):
+		_train.set_cab_view(enabled)
+	if _route_camera != null:
+		_route_camera.near = 0.08 if enabled else 0.5
+		_route_camera.fov = 64.0 if enabled else 52.0
+	_view_check_elapsed = 1.0
+	_view_ready_elapsed = 0.0
+	_update_route_position(_journey_distance)
+	_update_trip_label(_find_route_segment(_journey_distance))
+	if _status_label != null:
+		_status_label.text = "状态：驾驶室司机视角" if enabled else "状态：轨道跟车视角"
 
 func _begin_route_preload_wait(loaded_tile_count: int) -> void:
 	_route_preloading = true
@@ -250,7 +276,7 @@ func _measure_view_coverage(allow_build: bool = true) -> int:
 	var nearest: Array[float] = []
 	var missing_geometry := false
 	var ray_ends: Array[Vector3] = []
-	for y in [0.3, 0.5, 0.7]:
+	for y in ([0.56, 0.7, 0.84] if _cab_view else [0.3, 0.5, 0.7]):
 		for x in [0.25, 0.5, 0.75]:
 			covered.append(false)
 			nearest.append(INF)
@@ -331,14 +357,40 @@ func _update_route_position(distance: float) -> void:
 	var route_forward := (ecef_to_engine_basis * (ahead_ecef - behind_ecef)).slide(surface_up).normalized()
 	if route_forward.is_zero_approx():
 		route_forward = (-_route_camera.global_basis.z).slide(surface_up).normalized()
-	var camera_sample := _sample_route(maxf(distance - CAMERA_TRAILING_DISTANCE_METERS, 0.0))
-	var camera_position := ecef_to_engine_basis * (_cartographic_to_ecef(camera_sample.lat, camera_sample.lon, _rail_height) - _origin_ecef)
-	if distance < CAMERA_TRAILING_DISTANCE_METERS:
-		camera_position -= route_forward * (CAMERA_TRAILING_DISTANCE_METERS - distance)
-	camera_position += surface_up * CAMERA_HEIGHT_METERS
-	var view_target := ground_position + route_forward * CAMERA_LOOK_AHEAD_METERS
+	var camera_position: Vector3
+	var view_target: Vector3
+	var camera_surface_up := surface_up
+	if _cab_view:
+		var cab_distance := clampf(distance + CAB_MILE_OFFSET_METERS, 0.0, _total_route_distance)
+		var cab_sample := _sample_route(cab_distance)
+		var cab_ahead_sample := _sample_route(minf(cab_distance + ROUTE_DIRECTION_SAMPLE_METERS, _total_route_distance))
+		var cab_behind_sample := _sample_route(maxf(cab_distance - ROUTE_DIRECTION_SAMPLE_METERS, 0.0))
+		var cab_ground_ecef := _cartographic_to_ecef(float(cab_sample.lat), float(cab_sample.lon), _rail_height)
+		var cab_up_ecef := _cartographic_to_ecef(float(cab_sample.lat), float(cab_sample.lon), _rail_height + 1000.0)
+		var cab_ahead_ecef := _cartographic_to_ecef(float(cab_ahead_sample.lat), float(cab_ahead_sample.lon), _rail_height)
+		var cab_behind_ecef := _cartographic_to_ecef(float(cab_behind_sample.lat), float(cab_behind_sample.lon), _rail_height)
+		var cab_ground_position := ecef_to_engine_basis * (cab_ground_ecef - _origin_ecef)
+		camera_surface_up = (ecef_to_engine_basis * (cab_up_ecef - cab_ground_ecef)).normalized()
+		var cab_forward := (ecef_to_engine_basis * (cab_ahead_ecef - cab_behind_ecef)).slide(camera_surface_up).normalized()
+		if cab_forward.is_zero_approx():
+			cab_forward = route_forward
+		camera_position = cab_ground_position + camera_surface_up * CAB_EYE_HEIGHT_METERS
+		var target_distance := minf(cab_distance + CAB_LOOK_AHEAD_METERS, _total_route_distance)
+		if target_distance > cab_distance + 0.1:
+			var target_sample := _sample_route(target_distance)
+			var target_ecef := _cartographic_to_ecef(float(target_sample.lat), float(target_sample.lon), _rail_height + 2.4)
+			view_target = ecef_to_engine_basis * (target_ecef - _origin_ecef)
+		else:
+			view_target = cab_ground_position + cab_forward * CAB_LOOK_AHEAD_METERS + camera_surface_up * 2.4
+	else:
+		var camera_sample := _sample_route(maxf(distance - CAMERA_TRAILING_DISTANCE_METERS, 0.0))
+		camera_position = ecef_to_engine_basis * (_cartographic_to_ecef(camera_sample.lat, camera_sample.lon, _rail_height) - _origin_ecef)
+		if distance < CAMERA_TRAILING_DISTANCE_METERS:
+			camera_position -= route_forward * (CAMERA_TRAILING_DISTANCE_METERS - distance)
+		camera_position += surface_up * CAMERA_HEIGHT_METERS
+		view_target = ground_position + route_forward * CAMERA_LOOK_AHEAD_METERS
 	var view_direction := (view_target - camera_position).normalized()
-	var camera_right := view_direction.cross(surface_up).normalized()
+	var camera_right := view_direction.cross(camera_surface_up).normalized()
 	var camera_up := camera_right.cross(view_direction).normalized()
 	var camera_ecef := _origin_ecef + ecef_to_engine_basis.inverse() * camera_position
 	_route_georeference.ecefX = camera_ecef.x
@@ -388,13 +440,14 @@ func _cartographic_to_ecef(latitude: float, longitude: float, height: float) -> 
 func _update_trip_label(_segment_index: int) -> void:
 	if _trip_label == null:
 		return
-	_trip_label.text = "区间：%s → %s\n里程：%.1f / %.1f km    速度：%.0f km/h    时间压缩：%.1f×" % [
+	_trip_label.text = "区间：%s → %s\n里程：%.1f / %.1f km    速度：%.0f km/h    时间压缩：%.1f×\n视角：%s" % [
 		"东京",
 		"品川",
 		_journey_distance / 1000.0,
 		_total_route_distance / 1000.0,
 		TRAIN_REFERENCE_SPEED_KMH,
-		_time_scale
+		_time_scale,
+		"驾驶室司机视角" if _cab_view else "轨道跟车视角"
 	]
 	if _progress_bar != null:
 		_progress_bar.value = 100.0 * _journey_distance / _total_route_distance
@@ -464,6 +517,10 @@ func _create_cesium_scene() -> void:
 	_route_camera.fov = 52.0
 	_route_camera.current = true
 	add_child(_route_camera)
+	_cab_interior = load("res://cab_interior.gd").new()
+	_cab_interior.name = "CabInterior"
+	_cab_interior.visible = false
+	_route_camera.add_child(_cab_interior)
 	_route_camera.look_at(Vector3(0.0, 0.0, -1800.0), Vector3.UP)
 
 
@@ -496,7 +553,7 @@ func _create_help_overlay() -> void:
 	text_box.add_child(_progress_bar)
 	var instructions := Label.new()
 	var source_name := "Google Photorealistic 3D Tiles" if _photorealistic else "World Terrain + Bing Aerial + PLATEAU"
-	instructions.text = "Space：暂停/继续    R：重新预览    时间压缩：固定 1×\n视角：轨道跟车 / 高 65 m / 后方 85 m    数据：" + (source_name if _use_cesium_ion else "CesiumGS 本地回退样例")
+	instructions.text = "Space：暂停/继续    R：重新预览    C：切换驾驶室视角    时间压缩：固定 1×\n外部视角：高 65 m / 后方 85 m    数据：" + (source_name if _use_cesium_ion else "CesiumGS 本地回退样例")
 	text_box.add_child(instructions)
 	var attribution := LinkButton.new()
 	attribution.text = "轨道 © OpenStreetMap contributors (ODbL)"

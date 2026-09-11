@@ -51,7 +51,8 @@ func _initialize() -> void:
 	var slope_after := max_slope(smooth)
 	var kink_before := max_slope_change(source)
 	var kink_after := max_slope_change(smooth)
-	var ok := smooth[0] == source[0] and smooth[-1] == source[-1] and after < before \
+	# Dense route must not retain short corner-rounding kinks in cab view.
+	var ok := smooth[0] == source[0] and smooth[-1] == source[-1] and after < minf(before, 0.3) \
 		and slope_after < slope_before and kink_after < kink_before and deviation < 6.01
 	print("ROUTE_SMOOTHING ", "PASS" if ok else "FAIL", " source_points=", source.size(), " smooth_points=", smooth.size(),
 		" max_turn_before_deg=", before, " max_turn_after_deg=", after,
