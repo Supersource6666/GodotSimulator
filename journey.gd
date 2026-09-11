@@ -39,7 +39,8 @@ var _cab_interior: Node3D
 var _cab_view := false
 var _buildings_tileset: Cesium3DTileset
 var _trip_label: Label
-var _progress_bar: ProgressBar
+var _progress_label: Label
+var _progress_slider: HSlider
 var _route_segment_lengths: Array[float] = []
 var _total_route_distance := 0.0
 var _journey_distance := 0.0
@@ -145,6 +146,8 @@ func _process(delta: float) -> void:
 		if initial_load_finished:
 			_reported_loaded = true
 			_journey_started = _use_cesium_ion
+			if _progress_slider != null:
+				_progress_slider.editable = _journey_started
 			_status_label.text = "状态：近景细节达到门槛，开始预览" if _use_cesium_ion else "状态：本地回退样例已加载（无日本地形）"
 			_status_label.modulate = Color(0.55, 1.0, 0.65)
 
@@ -187,6 +190,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_R:
 				_journey_distance = 0.0
 				_journey_started = false
+				if _progress_slider != null:
+					_progress_slider.editable = false
 				_reported_loaded = false
 				_elapsed = 0.0
 				_load_stable_elapsed = 0.0
@@ -449,8 +454,29 @@ func _update_trip_label(_segment_index: int) -> void:
 		_time_scale,
 		"驾驶室司机视角" if _cab_view else "轨道跟车视角"
 	]
-	if _progress_bar != null:
-		_progress_bar.value = 100.0 * _journey_distance / _total_route_distance
+	if _progress_label != null:
+		_progress_label.text = '%d m / %d m' % [roundi(_journey_distance), roundi(_total_route_distance)]
+	if _progress_slider != null:
+		_progress_slider.set_value_no_signal(100.0 * _journey_distance / _total_route_distance)
+
+
+func _seek_to_progress(percent: float) -> void:
+	if not _journey_started or _total_route_distance <= 0.0:
+		return
+	_journey_distance = clampf(percent, 0.0, 100.0) * _total_route_distance / 100.0
+	_route_preloading = false
+	_next_preload_distance = minf(
+		(floorf(_journey_distance / ROUTE_PRELOAD_INTERVAL_METERS) + 1.0) * ROUTE_PRELOAD_INTERVAL_METERS,
+		_total_route_distance
+	)
+	_view_check_elapsed = 1.0
+	_view_ready_elapsed = 0.0
+	if is_equal_approx(_journey_distance, _total_route_distance):
+		_paused = true
+	_update_route_position(_journey_distance)
+	_update_trip_label(_find_route_segment(_journey_distance))
+	if _status_label != null:
+		_status_label.text = '状态：已跳转到 %.1f km' % (_journey_distance / 1000.0)
 
 
 func _create_cesium_scene() -> void:
@@ -547,10 +573,6 @@ func _create_help_overlay() -> void:
 	text_box.add_child(title)
 	_trip_label = Label.new()
 	text_box.add_child(_trip_label)
-	_progress_bar = ProgressBar.new()
-	_progress_bar.show_percentage = true
-	_progress_bar.custom_minimum_size = Vector2(480.0, 20.0)
-	text_box.add_child(_progress_bar)
 	var instructions := Label.new()
 	var source_name := "Google Photorealistic 3D Tiles" if _photorealistic else "World Terrain + Bing Aerial + PLATEAU"
 	instructions.text = "Space：暂停/继续    R：重新预览    C：切换驾驶室视角    时间压缩：固定 1×\n外部视角：高 65 m / 后方 85 m    数据：" + (source_name if _use_cesium_ion else "CesiumGS 本地回退样例")
@@ -563,6 +585,31 @@ func _create_help_overlay() -> void:
 	_status_label.text = "状态：正在加载东京站附近地形…" if _use_cesium_ion else "状态：正在加载本地样例（需要 Token 才能显示日本地形）"
 	_status_label.modulate = Color(1.0, 0.85, 0.45)
 	text_box.add_child(_status_label)
+	var progress_track := VBoxContainer.new()
+	progress_track.name = 'JourneyProgressTrack'
+	progress_track.anchor_left = 0.08
+	progress_track.anchor_top = 1.0
+	progress_track.anchor_right = 0.92
+	progress_track.anchor_bottom = 1.0
+	progress_track.offset_top = -72.0
+	progress_track.offset_bottom = -16.0
+	canvas.add_child(progress_track)
+	_progress_label = Label.new()
+	_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_progress_label.add_theme_font_size_override('font_size', 17)
+	_progress_label.add_theme_color_override('font_color', Color.WHITE)
+	_progress_label.add_theme_color_override('font_outline_color', Color.BLACK)
+	_progress_label.add_theme_constant_override('outline_size', 4)
+	progress_track.add_child(_progress_label)
+	_progress_slider = HSlider.new()
+	_progress_slider.min_value = 0.0
+	_progress_slider.max_value = 100.0
+	_progress_slider.step = 0.1
+	_progress_slider.editable = false
+	_progress_slider.custom_minimum_size = Vector2(0.0, 28.0)
+	_progress_slider.tooltip_text = '拖动或点击以跳转运行进度'
+	_progress_slider.value_changed.connect(_seek_to_progress)
+	progress_track.add_child(_progress_slider)
 	_update_trip_label(0)
 
 

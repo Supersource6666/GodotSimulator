@@ -40,7 +40,8 @@ var cab_view := false
 var train: Node3D
 var label: Label
 var panel: PanelContainer
-var progress: ProgressBar
+var progress_label: Label
+var progress_slider: HSlider
 var started_ms := 0
 var manifest: Dictionary
 var memory_at_ready := 0
@@ -151,7 +152,7 @@ func _setup_scene() -> void:
 	add_child(canvas)
 	panel = PanelContainer.new()
 	panel.position = Vector2(20, 20)
-	panel.custom_minimum_size = Vector2(555, 220)
+	panel.custom_minimum_size = Vector2(555, 0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.035, 0.055, 0.07, 0.8)
 	style.content_margin_left = 16
@@ -165,9 +166,6 @@ func _setup_scene() -> void:
 	label = Label.new()
 	label.add_theme_font_size_override("font_size", 18)
 	column.add_child(label)
-	progress = ProgressBar.new()
-	progress.custom_minimum_size = Vector2(0, 20)
-	column.add_child(progress)
 	var credits := AcceptDialog.new()
 	credits.name = "DataCredits"
 	credits.title = "数据来源与说明"
@@ -177,6 +175,32 @@ func _setup_scene() -> void:
 	about.text = "数据来源与说明（F1）"
 	about.pressed.connect(func(): credits.popup_centered())
 	column.add_child(about)
+	var progress_track := VBoxContainer.new()
+	progress_track.name = 'JourneyProgressTrack'
+	progress_track.anchor_left = 0.08
+	progress_track.anchor_top = 1.0
+	progress_track.anchor_right = 0.92
+	progress_track.anchor_bottom = 1.0
+	progress_track.offset_top = -72.0
+	progress_track.offset_bottom = -16.0
+	canvas.add_child(progress_track)
+	progress_label = Label.new()
+	progress_label.text = '0 m / 0 m'
+	progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	progress_label.add_theme_font_size_override('font_size', 17)
+	progress_label.add_theme_color_override('font_color', Color.WHITE)
+	progress_label.add_theme_color_override('font_outline_color', Color.BLACK)
+	progress_label.add_theme_constant_override('outline_size', 4)
+	progress_track.add_child(progress_label)
+	progress_slider = HSlider.new()
+	progress_slider.min_value = 0.0
+	progress_slider.max_value = 100.0
+	progress_slider.step = 0.1
+	progress_slider.editable = false
+	progress_slider.custom_minimum_size = Vector2(0.0, 28.0)
+	progress_slider.tooltip_text = '拖动或点击以跳转运行进度'
+	progress_slider.value_changed.connect(_seek_to_progress)
+	progress_track.add_child(progress_slider)
 
 func _load_step() -> void:
 	while pending.size() < 4 and requested < assets.size():
@@ -508,7 +532,22 @@ func _refresh_ui() -> void:
 			view_text = "瞭望：" + str(vantages[vantage]["name"])
 	var loop_text := "循环：开" if loop_enabled else "循环：关"
 	label.text = "东海道新干线 · 东京 → 品川 · 本地版\n里程：%.2f / %.2f km    速度：285 km/h\n范围：轨道两侧各 500 m    航空影像：Z18\n资源：%d / %d    状态：%s    循环：%s\n视角：%s\nSpace：暂停/继续    R：重新预览    C：驾驶室视角    V：切换瞭望视角    L：切换循环\n无需网络／无需 Cesium Token（命令行加 --offline-loop 启动即循环）" % [mileage / 1000, distances[-1] / 1000, loaded, assets.size(), status, loop_text, view_text]
-	progress.value = 100.0 * mileage / distances[-1] if ready_for_trip else 100.0 * loaded / max(1, assets.size())
+	var total_distance := float(distances[-1])
+	var progress_percent := 100.0 * mileage / total_distance
+	progress_label.text = '%d m / %d m' % [roundi(mileage), roundi(total_distance)]
+	progress_slider.editable = ready_for_trip
+	progress_slider.set_value_no_signal(progress_percent)
+
+func _seek_to_progress(percent: float) -> void:
+	if not ready_for_trip or distances.is_empty() or distances[-1] <= 0.0:
+		return
+	mileage = clampf(percent, 0.0, 100.0) * distances[-1] / 100.0
+	if is_equal_approx(mileage, distances[-1]):
+		paused = true
+	camera_guard.blocked = false
+	camera_guard.initialized = false
+	_update_position()
+	_refresh_ui()
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
