@@ -19,6 +19,7 @@ func _test() -> void:
 	assert(is_equal_approx(environment.ambient_light_energy, 0.32))
 	assert(environment.tonemap_mode == Environment.TONE_MAPPER_ACES)
 	assert(environment.adjustment_enabled and environment.adjustment_contrast > 1.0)
+	assert(is_equal_approx(preview.CONFLICT_MILEAGE_C_M, 1718.0))
 	assert(preview.panel.visible and not preview.ready_for_trip)
 	var key := InputEventKey.new()
 	key.keycode = KEY_G

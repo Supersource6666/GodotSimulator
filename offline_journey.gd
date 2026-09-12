@@ -21,7 +21,8 @@ const CAB_EYE_HEIGHT_M := 2.45
 const CAB_MILE_OFFSET_M := 53.0
 const CAB_LOOK_AHEAD_M := 100.0
 const CAB_LOOK_DOWN_DEGREES := 9.0
-# 根据截图定位的两处冲突点里程：3236m（桥梁/桁架）、4579m（建筑）。
+# 根据截图定位的三处冲突点里程：1718m（建筑）、3236m（桥梁/桁架）、4579m（建筑）。
+const CONFLICT_MILEAGE_C_M := 1718.0
 const CONFLICT_MILEAGE_A_M := 3236.0
 const CONFLICT_MILEAGE_B_M := 4579.0
 const CONFLICT_CLIP_RADIUS_M := 2.0
@@ -98,8 +99,12 @@ func _ready() -> void:
 		var difference := route[index] - route[index - 1]
 		distances.append(distances[-1] + Vector2(difference.x, difference.z).length())
 	mini_map.configure(distances[-1])
-	# 预计算两处冲突点对应的世界坐标，用于精确剔除冲突网格。
-	_conflict_points = PackedVector3Array([sample(CONFLICT_MILEAGE_A_M), sample(CONFLICT_MILEAGE_B_M)])
+	# 预计算三处冲突点对应的世界坐标，用于精确剔除冲突网格。
+	_conflict_points = PackedVector3Array([
+		sample(CONFLICT_MILEAGE_C_M),
+		sample(CONFLICT_MILEAGE_A_M),
+		sample(CONFLICT_MILEAGE_B_M),
+	])
 	for asset in assets:
 		var relative: String = asset.get("path", "")
 		if not relative.begins_with("offline_data/models/") or ".." in relative or ":" in relative or "\\" in relative:
