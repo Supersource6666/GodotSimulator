@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bb3dc2ix83drl"
+
+[deps]
+
+files=["res://GPS_Data/speed_1.video.translation", "res://GPS_Data/speed_1.panel.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.status.translation", "res://GPS_Data/speed_1.review.translation"]
+
+source_file="res://GPS_Data/speed_1.csv"
+dest_files=["res://GPS_Data/speed_1.video.translation", "res://GPS_Data/speed_1.panel.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.speed.translation", "res://GPS_Data/speed_1.status.translation", "res://GPS_Data/speed_1.review.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

@@ -7,6 +7,7 @@ const SPEED := 285.0 / 3.6
 # 离线桥/轨视觉层：由参考工程的生成器最小适配而来。
 const TRACK_GENERATOR_SCRIPT := preload("res://assets/procedural/track_generator.gd")
 const CATENARY_GENERATOR_SCRIPT := preload("res://assets/procedural/catenary_generator.gd")
+const COVERED_GALLERY_SCRIPT := preload("res://assets/procedural/covered_gallery.gd")
 const CORRIDOR_SAMPLE_STEP := 2.0   # 更密的桥轨采样，保留平滑路径的小曲率变化
 const TOWER_HEIGHT_M := 130.0       # 瞭望塔相机相对轨面的高度
 const TOWER_REACH_M := 420.0        # 瞭望方向沿线路前视距离
@@ -26,6 +27,9 @@ const CONFLICT_MILEAGE_C_M := 1718.0
 const CONFLICT_MILEAGE_A_M := 3236.0
 const CONFLICT_MILEAGE_B_M := 4579.0
 const CONFLICT_CLIP_RADIUS_M := 2.0
+const LEVEL_CROSSING_CENTERS_M := [2326.0, 2915.0, 3837.0]
+const LEVEL_CROSSING_HALF_LENGTH_M := 65.0
+const LEVEL_CROSSING_TRANSITION_M := 60.0
 # 视觉采样（桥/轨/接触网）朝向的切线基线；过短会放大点位抖动。
 var route := PackedVector3Array()
 var distances := PackedFloat64Array()
@@ -38,6 +42,7 @@ var ready_for_trip := false
 var paused := false
 var loop_enabled := false   # --offline-loop：到达品川后自动回到东京继续循环运行
 var loop_count := 0
+var wireframe_enabled := false
 var mileage := 0.0
 var elapsed := 0.0
 var max_process_ms := 0.0
@@ -327,7 +332,8 @@ func _finish_camera_collision_setup() -> void:
 	# Allow the physics server to register the final building colliders.
 	await get_tree().physics_frame
 	await get_tree().physics_frame
-	var grounded := ground_track.conform(route, get_world_3d().direct_space_state)
+	var grounded := ground_track.conform(route, distances, get_world_3d().direct_space_state,
+		LEVEL_CROSSING_CENTERS_M, LEVEL_CROSSING_HALF_LENGTH_M, LEVEL_CROSSING_TRANSITION_M)
 	if grounded.is_empty():
 		_fail("地面轨道采样失败：沿线地形缺失。")
 		return
@@ -359,6 +365,10 @@ func _build_offline_corridor() -> void:
 	var overhead = CATENARY_GENERATOR_SCRIPT.new()
 	corridor.add_child(overhead)
 	overhead.build(distances[-1], _route_pose_sample)
+	var gallery = COVERED_GALLERY_SCRIPT.new()
+	gallery.name = "LevelCrossingGalleries"
+	corridor.add_child(gallery)
+	gallery.build(LEVEL_CROSSING_CENTERS_M, LEVEL_CROSSING_HALF_LENGTH_M, _route_pose_sample)
 
 
 func _build_route_samples() -> Array[Dictionary]:
@@ -654,7 +664,7 @@ func _refresh_ui() -> void:
 			else:
 				view_text = "%d · %s" % [vantage + 2, vantages[vantage]["name"]]
 	var loop_text := "循环：开" if loop_enabled else "循环：关"
-	label.text = "东海道新干线 · 东京 → 品川 · 本地版\n里程：%.2f / %.2f km    速度：285 km/h\n范围：轨道两侧各 500 m    航空影像：Z18\n资源：%d / %d    状态：%s    循环：%s\n视角：%s\n1/2/3/4：跟踪 / 俯视拍摄 / 跟随瞭望 / 驾驶室    Space：暂停/继续    R：重新预览    C：驾驶室视角    V：切换瞭望视角    L：切换循环\nCtrl+Shift+F/G：小地图 / 提示面板    无需 Cesium Token" % [mileage / 1000, distances[-1] / 1000, loaded, assets.size(), status, loop_text, view_text]
+	label.text = "东海道新干线 · 东京 → 品川 · 本地版\n里程：%.2f / %.2f km    速度：285 km/h\n范围：轨道两侧各 500 m    航空影像：Z18\n资源：%d / %d    状态：%s    循环：%s\n视角：%s\n1/2/3/4：跟踪 / 俯视拍摄 / 跟随瞭望 / 驾驶室    Space：暂停/继续    R：重新预览    C：驾驶室视角    V：切换瞭望视角    L：切换循环\nF：切换网格模式    Ctrl+Shift+F/G：小地图 / 提示面板    无需 Cesium Token" % [mileage / 1000, distances[-1] / 1000, loaded, assets.size(), status, loop_text, view_text]
 	var total_distance := float(distances[-1])
 	var progress_percent := 100.0 * mileage / total_distance
 	progress_label.text = '%d m / %d m' % [roundi(mileage), roundi(total_distance)]
@@ -686,6 +696,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if event.keycode == KEY_F and event.ctrl_pressed and event.shift_pressed and not event.alt_pressed and not event.meta_pressed:
 		mini_map.visible = not mini_map.visible
+		get_viewport().set_input_as_handled()
+		return
+	if event.keycode == KEY_F and not event.ctrl_pressed and not event.shift_pressed and not event.alt_pressed and not event.meta_pressed:
+		wireframe_enabled = not wireframe_enabled
+		get_viewport().debug_draw = Viewport.DEBUG_DRAW_WIREFRAME if wireframe_enabled else Viewport.DEBUG_DRAW_DISABLED
 		get_viewport().set_input_as_handled()
 		return
 	if not ready_for_trip:

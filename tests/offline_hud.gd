@@ -57,6 +57,14 @@ func _test() -> void:
 	preview._unhandled_key_input(key)
 	assert(preview.mini_map.visible)
 	assert(not preview.panel.visible)
+	key.ctrl_pressed = false
+	key.shift_pressed = false
+	preview._unhandled_key_input(key)
+	assert(preview.wireframe_enabled)
+	assert(root.debug_draw == Viewport.DEBUG_DRAW_WIREFRAME)
+	preview._unhandled_key_input(key)
+	assert(not preview.wireframe_enabled)
+	assert(root.debug_draw == Viewport.DEBUG_DRAW_DISABLED)
 	preview.free()
-	print("OFFLINE_HUD_TEST PASS: independent status/minimap toggles, repeat, release, modifiers")
+	print("OFFLINE_HUD_TEST PASS: independent status/minimap/wireframe toggles, repeat, release, modifiers")
 	quit(0)

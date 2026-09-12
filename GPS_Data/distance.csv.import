@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://cj7xn1lyraof4"
+
+[deps]
+
+files=["res://GPS_Data/distance.video.translation", "res://GPS_Data/distance.panel.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.status.translation", "res://GPS_Data/distance.review.translation"]
+
+source_file="res://GPS_Data/distance.csv"
+dest_files=["res://GPS_Data/distance.video.translation", "res://GPS_Data/distance.panel.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.distance.translation", "res://GPS_Data/distance.status.translation", "res://GPS_Data/distance.review.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

@@ -19,7 +19,8 @@ func add_terrain(instance: Node) -> void:
 		mesh.add_child(body)
 		bodies.append(body)
 
-func conform(route: PackedVector3Array, space: PhysicsDirectSpaceState3D) -> PackedVector3Array:
+func conform(route: PackedVector3Array, chain: PackedFloat64Array, space: PhysicsDirectSpaceState3D,
+		centers: Array, half_length: float, transition_length: float) -> PackedVector3Array:
 	var result := route.duplicate()
 	for i in range(route.size()):
 		var forward := route[mini(i + 4, route.size() - 1)] - route[maxi(i - 4, 0)]
@@ -37,9 +38,41 @@ func conform(route: PackedVector3Array, space: PhysicsDirectSpaceState3D) -> Pac
 				return PackedVector3Array()
 			ground_y = maxf(ground_y, (hit.position as Vector3).y)
 		result[i].y = ground_y + RAIL_TOP_M
-	print("GROUND_TRACK_READY samples=", result.size(), " terrain_meshes=", bodies.size(), " bridges=0")
+	result = level_crossings(result, chain, centers, half_length, transition_length)
+	print("GROUND_TRACK_READY samples=", result.size(), " terrain_meshes=", bodies.size(),
+		" level_galleries=", centers.size())
 	# Terrain queries are no longer needed during travel.
 	for body in bodies:
 		body.queue_free()
 	bodies.clear()
+	return result
+
+## Replace local terrain-following humps with a constant rail elevation inside each
+## covered gallery. The outer smoothstep blend prevents a grade break at portals.
+func level_crossings(points: PackedVector3Array, chain: PackedFloat64Array, centers: Array,
+		half_length: float, transition_length: float) -> PackedVector3Array:
+	var result := points.duplicate()
+	if result.size() != chain.size() or result.is_empty():
+		push_error("Ground track: route/distance size mismatch while levelling galleries.")
+		return PackedVector3Array()
+	for center_value in centers:
+		var center := float(center_value)
+		var level_y := -INF
+		for index in result.size():
+			if absf(float(chain[index]) - center) <= half_length:
+				level_y = maxf(level_y, result[index].y)
+		if is_inf(level_y):
+			continue
+		var outer := half_length + transition_length
+		for index in result.size():
+			var offset := absf(float(chain[index]) - center)
+			if offset > outer:
+				continue
+			var weight := 1.0
+			if offset > half_length and transition_length > 0.0:
+				weight = clampf((outer - offset) / transition_length, 0.0, 1.0)
+				weight = weight * weight * (3.0 - 2.0 * weight)
+			var point := result[index]
+			point.y = lerpf(point.y, level_y, weight)
+			result[index] = point
 	return result
