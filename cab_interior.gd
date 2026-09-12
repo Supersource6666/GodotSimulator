@@ -1,28 +1,56 @@
 extends Node3D
-## Lightweight camera-local cab shell. The source train GLB is exterior-only, so
-## this supplies an unobstructed windscreen, dashboard and frame for driver view.
+## Camera-local Shinkansen cab overlay. Transparent windscreen pixels reveal the
+## live 3D route while the photographic console and frame remain screen-aligned.
+
+const CAB_OVERLAY_TEXTURE := preload("res://assets/Shinkansen/cab_overlay.png")
+const OVERLAY_DISTANCE_M := 0.60
+const OVERLAY_COVER_MARGIN := 1.002
+
+var _overlay: Sprite3D
+var _last_viewport_size := Vector2.ZERO
+var _last_camera_fov := -1.0
+
 
 func _ready() -> void:
-	_add_box("Dashboard", Vector3(2.7, 0.36, 1.15), Vector3(0.0, -0.72, -1.05), Color("17222b"))
-	_add_box("Console", Vector3(1.15, 0.22, 0.62), Vector3(0.0, -0.48, -1.32), Color("293944"))
-	_add_box("LeftPillar", Vector3(0.13, 1.65, 0.16), Vector3(-1.16, 0.02, -1.12), Color("111a20"))
-	_add_box("RightPillar", Vector3(0.13, 1.65, 0.16), Vector3(1.16, 0.02, -1.12), Color("111a20"))
-	_add_box("TopFrame", Vector3(2.45, 0.16, 0.18), Vector3(0.0, 0.79, -1.12), Color("111a20"))
-	_add_box("LeftDeskWing", Vector3(0.58, 0.2, 0.55), Vector3(-0.95, -0.54, -1.25), Color("202d36"))
-	_add_box("RightDeskWing", Vector3(0.58, 0.2, 0.55), Vector3(0.95, -0.54, -1.25), Color("202d36"))
+	_overlay = Sprite3D.new()
+	_overlay.name = "CabOverlay"
+	_overlay.texture = CAB_OVERLAY_TEXTURE
+	_overlay.position = Vector3(0.0, 0.0, -OVERLAY_DISTANCE_M)
+	_overlay.centered = true
+	_overlay.shaded = false
+	_overlay.no_depth_test = true
+	_overlay.double_sided = true
+	_overlay.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	_overlay.render_priority = 127
+	add_child(_overlay)
+	get_viewport().size_changed.connect(_fit_overlay_to_viewport)
+	_fit_overlay_to_viewport()
 
-func _add_box(node_name: String, size: Vector3, position: Vector3, color: Color) -> void:
-	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.name = node_name
-	var box := BoxMesh.new()
-	box.size = size
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 0.72
-	material.metallic_specular = 0.18
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	box.material = material
-	mesh_instance.mesh = box
-	mesh_instance.position = position
-	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mesh_instance)
+
+func _process(_delta: float) -> void:
+	# Camera FOV changes when cab view is toggled and does not emit a resize signal.
+	# Cache both values so ordinary frames do not rebuild the overlay transform.
+	var camera := get_parent() as Camera3D
+	if camera == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size != _last_viewport_size or not is_equal_approx(camera.fov, _last_camera_fov):
+		_fit_overlay_to_viewport()
+
+
+func _fit_overlay_to_viewport() -> void:
+	var camera := get_parent() as Camera3D
+	if camera == null or _overlay == null or _overlay.texture == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+	var texture_size := _overlay.texture.get_size()
+	# KEEP_HEIGHT makes Camera3D.fov vertical. Scale uniformly until both the
+	# viewport width and height are covered, preserving the source aspect ratio.
+	var visible_height := 2.0 * OVERLAY_DISTANCE_M * tan(deg_to_rad(camera.fov) * 0.5)
+	var visible_width := visible_height * viewport_size.aspect()
+	_overlay.pixel_size = maxf(visible_width / texture_size.x, visible_height / texture_size.y) \
+		* OVERLAY_COVER_MARGIN
+	_last_viewport_size = viewport_size
+	_last_camera_fov = camera.fov

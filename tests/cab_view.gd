@@ -23,6 +23,16 @@ func _lead_shell(train: Node3D) -> Node3D:
 			return child
 	return null
 
+func _assert_overlay_covers_viewport(interior: Node3D, camera: Camera3D) -> void:
+	interior._fit_overlay_to_viewport()
+	var overlay := interior.get_node("CabOverlay") as Sprite3D
+	var viewport_size := camera.get_viewport().get_visible_rect().size
+	var visible_height: float = 2.0 * interior.OVERLAY_DISTANCE_M * tan(deg_to_rad(camera.fov) * 0.5)
+	var visible_width: float = visible_height * viewport_size.aspect()
+	var overlay_size: Vector2 = overlay.texture.get_size() * overlay.pixel_size
+	assert(overlay_size.x >= visible_width and overlay_size.y >= visible_height)
+	assert(is_equal_approx(overlay_size.aspect(), overlay.texture.get_size().aspect()))
+
 func _run() -> void:
 	var preview = load("res://journey.gd").new()
 	root.add_child(preview)
@@ -34,10 +44,15 @@ func _run() -> void:
 	preview._journey_distance = 1200.0
 	preview._set_cab_view(true)
 	assert(preview._cab_view and preview._cab_interior.visible)
+	var online_overlay := preview._cab_interior.get_node("CabOverlay") as Sprite3D
+	assert(online_overlay != null and online_overlay.texture != null and online_overlay.no_depth_test)
+	_assert_overlay_covers_viewport(preview._cab_interior, preview._route_camera)
 	assert(is_equal_approx(preview._route_camera.near, 0.08))
 	assert(is_equal_approx(preview._route_camera.fov, 64.0))
 	assert(not online_shell.visible)
 	assert(absf(preview._route_camera.global_basis.determinant() - 1.0) < 0.001)
+	var online_lead_car_center: float = float(preview._train.CONSIST_CAR_COUNT - 1) * 0.5 * preview._train.CAR_CENTER_SPACING_M
+	assert(is_equal_approx(preview.CAB_MILE_OFFSET_METERS - online_lead_car_center, 12.5))
 	var cab_distance := minf(preview._journey_distance + preview.CAB_MILE_OFFSET_METERS, preview._total_route_distance)
 	var cab_sample: Dictionary = preview._sample_route(cab_distance)
 	var expected_ecef: Vector3 = preview._cartographic_to_ecef(cab_sample.lat, cab_sample.lon,
@@ -57,7 +72,16 @@ func _run() -> void:
 	assert(offline_shell != null and offline_shell.visible)
 	offline._set_cab_view(true)
 	assert(offline.cab_view and offline.cab_interior.visible)
+	var offline_overlay := offline.cab_interior.get_node("CabOverlay") as Sprite3D
+	assert(offline_overlay != null and offline_overlay.texture != null and offline_overlay.no_depth_test)
+	_assert_overlay_covers_viewport(offline.cab_interior, offline.camera)
 	assert(is_equal_approx(offline.camera.position.y, offline.CAB_EYE_HEIGHT_M))
+	var offline_lead_car_center: float = float(offline.train.CONSIST_CAR_COUNT - 1) * 0.5 * offline.train.CAR_CENTER_SPACING_M
+	assert(is_equal_approx(offline.CAB_MILE_OFFSET_M - offline_lead_car_center, 12.5))
+	assert(is_equal_approx(offline.camera.position.z, -offline.CAB_MILE_OFFSET_M))
+	var offline_view_direction := -offline.camera.basis.z
+	assert(absf(offline_view_direction.dot(Vector3.UP) + sin(deg_to_rad(offline.CAB_LOOK_DOWN_DEGREES))) < 0.001)
+	assert(absf(offline_view_direction.dot(Vector3.RIGHT)) < 0.001)
 	assert(is_equal_approx(offline.camera.near, 0.08))
 	assert(not offline_shell.visible)
 	offline._set_cab_view(false)

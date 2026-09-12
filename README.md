@@ -8,6 +8,12 @@
 本地包采用 PLATEAU 建筑 + 国土地理院航空影像/高程，覆盖现有东京—品川轨道约 6.7 km、两侧各 500 m。
 不使用 Google 瓦片。相机沿同一轨道线路跟随用户列车模型；全部本地资源加载后才开始前进。
 
+左上角小地图始终显示本地线路、列车方向和实时经纬度。需要 Google Maps 底图时，
+请在 Google Cloud 中启用 Maps Static API 和结算，将 API Key 单独写入项目根目录的
+`google_maps_api_key.txt`。该文件已加入 `.gitignore`，不会上传 GitHub；未配置 Key 或
+网络不可用时，小地图自动保留为本地线路模式。为减少地图请求，每 500 m 才更新一次底图，
+同一运行会话内会复用已下载的地图。
+
 ```powershell
 cd E:\GodotSimulator
 powershell -ExecutionPolicy Bypass -File .\run-preview.ps1 -Local

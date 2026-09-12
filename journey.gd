@@ -13,9 +13,11 @@ const CAMERA_HEIGHT_METERS := 65.0
 const CAMERA_TRAILING_DISTANCE_METERS := 85.0
 const CAMERA_LOOK_AHEAD_METERS := 8.0
 const ROUTE_DIRECTION_SAMPLE_METERS := 12.0
-const CAB_EYE_HEIGHT_METERS := 3.15
-const CAB_MILE_OFFSET_METERS := 51.0
-const CAB_LOOK_AHEAD_METERS := 160.0
+const CAB_EYE_HEIGHT_METERS := 2.45
+# 四节编组头车中心位于列车锚点前方 40.5 m；司机座椅再向车头方向约 12.5 m。
+const CAB_MILE_OFFSET_METERS := 53.0
+const CAB_LOOK_AHEAD_METERS := 100.0
+const CAB_LOOK_DOWN_DEGREES := 9.0
 # OSM supplies horizontal alignment, not surveyed rail elevation.
 const DEFAULT_RAIL_ELLIPSOID_HEIGHT := 46.0
 var _rail_height := DEFAULT_RAIL_ELLIPSOID_HEIGHT
@@ -383,10 +385,12 @@ func _update_route_position(distance: float) -> void:
 		var target_distance := minf(cab_distance + CAB_LOOK_AHEAD_METERS, _total_route_distance)
 		if target_distance > cab_distance + 0.1:
 			var target_sample := _sample_route(target_distance)
-			var target_ecef := _cartographic_to_ecef(float(target_sample.lat), float(target_sample.lon), _rail_height + 2.4)
+			var target_height := CAB_EYE_HEIGHT_METERS - tan(deg_to_rad(CAB_LOOK_DOWN_DEGREES)) * (target_distance - cab_distance)
+			var target_ecef := _cartographic_to_ecef(float(target_sample.lat), float(target_sample.lon), _rail_height + target_height)
 			view_target = ecef_to_engine_basis * (target_ecef - _origin_ecef)
 		else:
-			view_target = cab_ground_position + cab_forward * CAB_LOOK_AHEAD_METERS + camera_surface_up * 2.4
+			view_target = camera_position + cab_forward * CAB_LOOK_AHEAD_METERS \
+				- camera_surface_up * tan(deg_to_rad(CAB_LOOK_DOWN_DEGREES)) * CAB_LOOK_AHEAD_METERS
 	else:
 		var camera_sample := _sample_route(maxf(distance - CAMERA_TRAILING_DISTANCE_METERS, 0.0))
 		camera_position = ecef_to_engine_basis * (_cartographic_to_ecef(camera_sample.lat, camera_sample.lon, _rail_height) - _origin_ecef)

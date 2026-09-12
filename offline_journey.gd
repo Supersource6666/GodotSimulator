@@ -1,5 +1,5 @@
 extends Node3D
-## Independent local-only scene: no Cesium, HTTP, token, or local web server.
+## Independent local scene: no Cesium or local web server. Google mini-map is optional.
 ## All finest-detail assets are resident before motion; native building BVH queries.
 
 const MANIFEST := "res://offline_data/manifest.json"
@@ -8,16 +8,23 @@ const SPEED := 285.0 / 3.6
 const TRACK_GENERATOR_SCRIPT := preload("res://assets/procedural/track_generator.gd")
 const CATENARY_GENERATOR_SCRIPT := preload("res://assets/procedural/catenary_generator.gd")
 const CORRIDOR_SAMPLE_STEP := 2.0   # 更密的桥轨采样，保留平滑路径的小曲率变化
-const TOWER_HEIGHT_M := 92.0        # 瞭望塔相机相对轨面的高度
-const TOWER_REACH_M := 360.0        # 瞭望方向沿线路前视距离
+const TOWER_HEIGHT_M := 130.0       # 瞭望塔相机相对轨面的高度
+const TOWER_REACH_M := 420.0        # 瞭望方向沿线路前视距离
+const OVERHEAD_HEIGHT_M := 160.0    # 俯视拍摄相机高度：需让 4 辆编组（约 108 m）完整入画
 const TRACKING_CAMERA_FORWARD_M := 100.0  # 沿实际轨道前方取相机机位，避免弯道切线偏离
 const TRACKING_CAMERA_HEIGHT_M := 24.0    # 前侧方低机位，受阻时自动升高
 const TRACKING_CAMERA_SIDE_M := 22.0
 const TRACKING_CAMERA_LOOK_BACK_M := 8.0  # 跟踪视角相机回看的落点（相对列车锚点，向后）
 const ROUTE_TANGENT_DELTA_M := 4.0
-const CAB_EYE_HEIGHT_M := 3.15
-const CAB_MILE_OFFSET_M := 51.0
-const CAB_LOOK_AHEAD_M := 160.0
+const CAB_EYE_HEIGHT_M := 2.45
+# 四节编组头车中心位于列车锚点前方 40.5 m；司机座椅再向车头方向约 12.5 m。
+const CAB_MILE_OFFSET_M := 53.0
+const CAB_LOOK_AHEAD_M := 100.0
+const CAB_LOOK_DOWN_DEGREES := 9.0
+# 根据截图定位的两处冲突点里程：3236m（桥梁/桁架）、4579m（建筑）。
+const CONFLICT_MILEAGE_A_M := 3236.0
+const CONFLICT_MILEAGE_B_M := 4579.0
+const CONFLICT_CLIP_RADIUS_M := 2.0
 # 视觉采样（桥/轨/接触网）朝向的切线基线；过短会放大点位抖动。
 var route := PackedVector3Array()
 var distances := PackedFloat64Array()
@@ -38,8 +45,10 @@ var camera: Camera3D
 var cab_interior: Node3D
 var cab_view := false
 var train: Node3D
+var _train_front_offset: float = 0.0
 var label: Label
 var panel: PanelContainer
+var mini_map: Control
 var progress_label: Label
 var progress_slider: HSlider
 var started_ms := 0
@@ -50,10 +59,15 @@ var previous_frame_us := 0
 var corridor: Node3D
 var vantages: Array[Dictionary] = []
 var vantage := -1
+# 塔架瞭望视线被建筑挡住时，仅本帧临时改用跟踪机位；不改写 vantage，
+# 列车驶出遮挡段后会自动恢复瞭望视角。
+var vantage_fallback := false
 var camera_guard := preload("res://camera_obstacle_guard.gd").new()
 var camera_collisions_ready := false
 var camera_collision_setup_started := false
 var ground_track := preload("res://ground_track.gd").new()
+var _conflict_points := PackedVector3Array()
+var _conflict_removed_meshes := 0
 
 func _ready() -> void:
 	started_ms = Time.get_ticks_msec()
@@ -83,6 +97,9 @@ func _ready() -> void:
 		# Horizontal chainage; visual DEM noise must not lengthen the trip.
 		var difference := route[index] - route[index - 1]
 		distances.append(distances[-1] + Vector2(difference.x, difference.z).length())
+	mini_map.configure(distances[-1])
+	# 预计算两处冲突点对应的世界坐标，用于精确剔除冲突网格。
+	_conflict_points = PackedVector3Array([sample(CONFLICT_MILEAGE_A_M), sample(CONFLICT_MILEAGE_B_M)])
 	for asset in assets:
 		var relative: String = asset.get("path", "")
 		if not relative.begins_with("offline_data/models/") or ".." in relative or ":" in relative or "\\" in relative:
@@ -97,6 +114,8 @@ func _ready() -> void:
 	add_child(train)
 	# 4 节编组需要按线路里程逐节定位（参考 train_demo_scene.gd 的编组跟随逻辑）。
 	train.set_pose_source(Callable(self, "_route_pose_sample"))
+	# 列车锚点不得使最前端车厢越过线路终点，否则末帧各车会被 clamp 到同一点而发生重叠。
+	_train_front_offset = float(train.CONSIST_CAR_COUNT - 1) * 0.5 * train.CAR_CENTER_SPACING_M
 	_update_position()
 	_refresh_ui()
 	# 桥/轨视觉层在首帧内构建（不阻塞资源异步加载）。
@@ -106,8 +125,11 @@ func _route_visual_setup() -> void:
 	if corridor == null:
 		_build_offline_corridor()
 	_build_vantages()
-	if "--offline-tower" in OS.get_cmdline_user_args() and not vantages.is_empty():
-		vantage = 0
+	if "--offline-tower" in OS.get_cmdline_user_args():
+		for index in range(vantages.size()):
+			if str(vantages[index].get("mode", "tower")) == "tower":
+				vantage = index
+				break
 	if vantage >= 0:
 		_update_position()
 
@@ -151,7 +173,7 @@ func _setup_scene() -> void:
 	var canvas := CanvasLayer.new()
 	add_child(canvas)
 	panel = PanelContainer.new()
-	panel.position = Vector2(20, 20)
+	panel.position = Vector2(360, 20)
 	panel.custom_minimum_size = Vector2(555, 0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.035, 0.055, 0.07, 0.8)
@@ -201,6 +223,8 @@ func _setup_scene() -> void:
 	progress_slider.tooltip_text = '拖动或点击以跳转运行进度'
 	progress_slider.value_changed.connect(_seek_to_progress)
 	progress_track.add_child(progress_slider)
+	mini_map = preload("res://mini_map_panel.gd").new()
+	canvas.add_child(mini_map)
 
 func _load_step() -> void:
 	while pending.size() < 4 and requested < assets.size():
@@ -221,18 +245,25 @@ func _load_step() -> void:
 				_fail("本地文件不是场景：" + path)
 				return
 			var instance := packed.instantiate()
-			add_child(instance)
-			if not path.get_file().begins_with("ground_"):
-				camera_guard.add_buildings(instance)
+			var is_ground := path.get_file().begins_with("ground_")
+			if not is_ground:
+				_cull_conflict_meshes(instance)
+			# 若冲突剔除后瓦片内已无可见网格，直接释放，不再加入场景与碰撞体。
+			if not is_ground and instance.find_children("*", "MeshInstance3D", true, false).is_empty():
+				instance.queue_free()
 			else:
-				ground_track.add_terrain(instance)
-			for mesh in instance.find_children("*", "MeshInstance3D", true, false):
-				mesh.visibility_range_end = 1800.0
-				mesh.visibility_range_end_margin = 150.0
-				for surface in mesh.mesh.get_surface_count():
-					var material = mesh.mesh.surface_get_material(surface)
-					if material is BaseMaterial3D:
-						material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+				add_child(instance)
+				if is_ground:
+					ground_track.add_terrain(instance)
+				else:
+					camera_guard.add_buildings(instance)
+				for mesh in instance.find_children("*", "MeshInstance3D", true, false):
+					mesh.visibility_range_end = 1800.0
+					mesh.visibility_range_end_margin = 150.0
+					for surface in mesh.mesh.get_surface_count():
+						var material = mesh.mesh.surface_get_material(surface)
+						if material is BaseMaterial3D:
+							material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 			pending.erase(path)
 			loaded += 1
 			break # Budget one scene instantiation per frame; no frame-spanning loop.
@@ -248,12 +279,44 @@ func _load_step() -> void:
 		print("OFFLINE_READY assets=", loaded, " route_m=", distances[-1],
 			" startup_ms=", Time.get_ticks_msec() - started_ms,
 			" static_memory_bytes=", memory_at_ready,
-			" network_nodes=", find_children("*", "HTTPRequest", true, false).size())
+			" network_nodes=", find_children("*", "HTTPRequest", true, false).size(),
+			" conflict_removed_meshes=", _conflict_removed_meshes)
 		if "--offline-capture" in OS.get_cmdline_user_args():
 			mileage = _capture_mileage()
 			paused = true
 			_update_position()
 	_refresh_ui()
+
+func _cull_conflict_meshes(root: Node3D) -> void:
+	var to_remove: Array[Node] = []
+	for mesh in root.find_children("*", "MeshInstance3D", true, false):
+		if _mesh_intersects_conflict_points(mesh as MeshInstance3D, root):
+			to_remove.append(mesh)
+	_conflict_removed_meshes += to_remove.size()
+	for mesh in to_remove:
+		mesh.queue_free()
+
+func _mesh_intersects_conflict_points(mesh: MeshInstance3D, root: Node3D) -> bool:
+	var bounds := _mesh_world_aabb(mesh, root)
+	if not bounds.has_volume():
+		return false
+	bounds = bounds.grow(CONFLICT_CLIP_RADIUS_M)
+	for point in _conflict_points:
+		if bounds.has_point(point):
+			return true
+	return false
+
+func _mesh_world_aabb(mesh: MeshInstance3D, root: Node3D) -> AABB:
+	# 模型尚未加入场景树，global_transform 不可用；手动累加从 mesh 到 root 的局部变换。
+	var xf := mesh.transform
+	var node := mesh.get_parent()
+	while node != null and node != root:
+		if node is Node3D:
+			xf = (node as Node3D).transform * xf
+		node = node.get_parent()
+	if node == root:
+		xf = root.transform * xf
+	return xf * mesh.get_aabb()
 
 func _finish_camera_collision_setup() -> void:
 	# Allow the physics server to register the final building colliders.
@@ -337,18 +400,18 @@ func _capture_mileage() -> float:
 	return minf(1200.0, distances[-1])
 
 
-# ── 塔架瞭望视角 ─────────────────────────
+# ── 跟随机位视角：俯视拍摄 / 塔架瞭望（均跟随列车移动） ─────────────────────────
 
 func _build_vantages() -> void:
 	vantages.clear()
 	var total := distances[-1]
 	if total < 2400.0:
 		return
-	# 正向（东京→品川方向）与反向各找一个较直的区段中点。
-	var forward_anchor := _find_straight_center(400.0, total - TOWER_REACH_M)
+	# 1) 俯视拍摄：跟随列车正上方垂直取景，不需要直线区段，中点仅供离线截图取景。
+	# 2) 塔架瞭望：反向（品川→东京方向）找一个较直的区段中点。
 	var backward_anchor := _find_straight_center(TOWER_REACH_M, total - 400.0)
-	vantages.append(_make_vantage(forward_anchor, 1.0, "东京→品川方向"))
-	vantages.append(_make_vantage(backward_anchor, -1.0, "品川→东京方向"))
+	vantages.append(_make_overhead_vantage(total * 0.5, _heading_at(total * 0.5)))
+	vantages.append(_make_vantage(backward_anchor, -1.0, "跟随瞭望：品川→东京方向"))
 
 
 func _find_straight_center(from_dist: float, to_dist: float) -> float:
@@ -373,14 +436,22 @@ func _heading_at(distance: float) -> Vector3:
 
 
 func _make_vantage(anchor_distance: float, look_dir: float, vantage_name: String) -> Dictionary:
-	var anchor := clampf(anchor_distance, 0.0, distances[-1])
-	var base := sample(anchor)
-	var target := sample(clampf(anchor + look_dir * TOWER_REACH_M, 0.0, distances[-1]))
+	# 只保留视角方向与初始里程；机位/目标点每帧按列车当前里程重算，实现跟随。
 	return {
 		"name": vantage_name,
-		"anchor": anchor,
-		"pos": base + Vector3.UP * TOWER_HEIGHT_M,
-		"target": target,
+		"mode": "tower",
+		"anchor": clampf(anchor_distance, 0.0, distances[-1]),
+		"look_dir": look_dir,
+	}
+
+
+func _make_overhead_vantage(anchor_distance: float, up_reference: Vector3) -> Dictionary:
+	# 俯视拍摄：正俯视跟随列车，up_reference 固定不变，画面朝向不会随弯道旋转。
+	return {
+		"name": "俯视拍摄",
+		"mode": "overhead",
+		"anchor": clampf(anchor_distance, 0.0, distances[-1]),
+		"up": up_reference,
 	}
 
 
@@ -448,13 +519,17 @@ func sample(distance: float) -> Vector3:
 	return route[index].lerp(route[index + 1], fraction)
 
 func _update_position(delta: float = 0.0) -> void:
-	var point := sample(mileage)
-	var heading := sample(mileage + 12) - sample(mileage - 12)
+	vantage_fallback = false
+	# 里程显示仍走完整区间，但列车锚点要预留最前端车厢的偏移，
+	# 保证进站停止时全车仍保持正常间距，不会被 clamp 到同一点重叠。
+	var train_anchor := clampf(mileage, 0.0, maxf(distances[-1] - _train_front_offset, 0.0))
+	var point := sample(train_anchor)
+	var heading := sample(train_anchor + 12) - sample(train_anchor - 12)
 	heading.y = 0
 	heading = heading.normalized()
 	train.position = point
 	train.look_at(point + heading, Vector3.UP)
-	train.anchor_distance = mileage
+	train.anchor_distance = train_anchor
 	train.set_cab_view(cab_view)
 	cab_interior.visible = cab_view
 	camera.near = 0.08 if cab_view else 0.5
@@ -468,34 +543,53 @@ func _update_position(delta: float = 0.0) -> void:
 		var target_distance := minf(cab_distance + CAB_LOOK_AHEAD_M, distances[-1])
 		var target: Vector3
 		if target_distance > cab_distance + 0.1:
-			target = _route_pose_sample(target_distance, 2.4).point
+			var target_height := CAB_EYE_HEIGHT_M - tan(deg_to_rad(CAB_LOOK_DOWN_DEGREES)) * (target_distance - cab_distance)
+			target = _route_pose_sample(target_distance, target_height).point
 		else:
-			target = cab_pose.point + cab_pose.forward * CAB_LOOK_AHEAD_M
+			target = cab_pose.point + cab_pose.forward * CAB_LOOK_AHEAD_M \
+				- cab_pose.up * tan(deg_to_rad(CAB_LOOK_DOWN_DEGREES)) * CAB_LOOK_AHEAD_M
 		camera.position = cab_pose.point
 		camera.look_at(target, cab_pose.up)
 		return
 	if vantage >= 0 and vantage < vantages.size():
 		var v: Dictionary = vantages[vantage]
-		if not camera_collisions_ready or camera_guard.clear_view(get_world_3d().direct_space_state,
-				v["pos"], PackedVector3Array([v["target"] + Vector3.UP * 3.0])):
+		if str(v.get("mode", "tower")) == "overhead":
+			# 俯视拍摄：机位跟随列车正上方垂直向下取景，列车始终位于画面中心。
+			var overhead_up: Vector3 = v.get("up", Vector3.FORWARD)
 			camera_guard.blocked = false
 			camera_guard.initialized = false
-			camera.position = v["pos"] as Vector3
-			camera.look_at(v["target"] as Vector3, Vector3.UP)
+			camera_guard.adjusted = false
+			camera_guard.partial_view = false
+			camera.position = point + Vector3.UP * OVERHEAD_HEIGHT_M
+			camera.look_at(point, overhead_up)
 			return
-		# An obstructed tower view falls back to the protected tracking view.
-		vantage = -1
-	var target := sample(mileage - TRACKING_CAMERA_LOOK_BACK_M) + Vector3.UP * 2.5
+		# 瞭望机位跟随列车：塔位与瞭望目标点都按当前里程实时重算，
+		# 列车驶出画面后不会丢失目标。
+		var look_dir: float = float(v.get("look_dir", 1.0))
+		var tower_pos := point + Vector3.UP * TOWER_HEIGHT_M
+		var tower_target := sample(clampf(train_anchor + look_dir * TOWER_REACH_M, 0.0, distances[-1]))
+		if not camera_collisions_ready or camera_guard.clear_view(get_world_3d().direct_space_state,
+				tower_pos, PackedVector3Array([tower_target + Vector3.UP * 3.0])):
+			camera_guard.blocked = false
+			camera_guard.initialized = false
+			camera.position = tower_pos
+			var to_target := (tower_target - tower_pos).normalized()
+			camera.look_at(tower_target, heading if absf(to_target.dot(Vector3.UP)) > 0.98 else Vector3.UP)
+			return
+		# 塔架视线被建筑遮挡：本帧改用受保护的跟踪机位，但保留 vantage，
+		# 下一帧重新判定，驶过遮挡段后自动恢复瞭望视角。
+		vantage_fallback = true
+	var target := sample(train_anchor - TRACKING_CAMERA_LOOK_BACK_M) + Vector3.UP * 2.5
 	if camera_collisions_ready:
 		var spacing: float = train.CAR_CENTER_SPACING_M
 		var front := float(train.CONSIST_CAR_COUNT - 1) * 0.5 * spacing
 		var targets := PackedVector3Array()
 		for index in range(train.CONSIST_CAR_COUNT):
-			targets.append(sample(mileage + front - spacing * float(index)) + Vector3.UP * 3.0)
-		camera.position = camera_guard.resolve(get_world_3d().direct_space_state, sample, mileage,
+			targets.append(sample(train_anchor + front - spacing * float(index)) + Vector3.UP * 3.0)
+		camera.position = camera_guard.resolve(get_world_3d().direct_space_state, sample, train_anchor,
 			targets, camera.position, delta, TRACKING_CAMERA_FORWARD_M, TRACKING_CAMERA_HEIGHT_M, TRACKING_CAMERA_SIDE_M)
 	else:
-		var pose := _route_pose_sample(mileage + TRACKING_CAMERA_FORWARD_M, TRACKING_CAMERA_HEIGHT_M)
+		var pose := _route_pose_sample(train_anchor + TRACKING_CAMERA_FORWARD_M, TRACKING_CAMERA_HEIGHT_M)
 		camera.position = pose.point + pose.right * TRACKING_CAMERA_SIDE_M
 	var aim: Vector3 = camera_guard.aim_target if camera_guard.partial_view else target
 	var direction := (aim - camera.position).normalized()
@@ -514,29 +608,54 @@ func _set_cab_view(enabled: bool) -> void:
 	_update_position()
 	_refresh_ui()
 
+func _set_view(index: int) -> void:
+	# 1=跟踪、2=俯视拍摄、3=跟随瞭望、4=驾驶室；与 V/C 循环保持同一套状态。
+	if not ready_for_trip:
+		return
+	if index <= 0 or index >= 3:
+		_set_cab_view(index >= 3)
+		return
+	if cab_view:
+		cab_view = false
+		if train != null:
+			train.set_cab_view(false)
+		if cab_interior != null:
+			cab_interior.visible = false
+	vantage = clampi(index - 1, -1, maxi(vantages.size() - 1, -1))
+	camera_guard.blocked = false
+	camera_guard.initialized = false
+	camera_guard.adjusted = false
+	camera_guard.partial_view = false
+	_update_position()
+	_refresh_ui()
+
 func _refresh_ui() -> void:
 	var status := "整段资源已就绪" if ready_for_trip else "本地资源准备中，列车等待"
 	if paused:
 		status = "已暂停" if mileage < distances[-1] else "已到达品川"
 	elif loop_enabled:
 		status = "循环运行中（第 %d 圈）" % (loop_count + 1)
-	var view_text := "驾驶室司机视角" if cab_view else "跟踪视角"
+	var view_text := "4 · 驾驶室司机视角" if cab_view else "1 · 跟踪视角"
 	if not cab_view:
 		if camera_guard.blocked:
 			status = "建筑遮挡，已停止前进；Space 重试 / V 换视角"
 		elif camera_guard.adjusted:
-			view_text = "跟踪视角（建筑避障）"
+			view_text = "1 · 跟踪视角（建筑避障）"
 		if camera_guard.partial_view:
-			view_text = "跟踪视角（部分车厢经过遮挡物）"
+			view_text = "1 · 跟踪视角（部分车厢经过遮挡物）"
 		if ready_for_trip and vantage >= 0 and vantage < vantages.size():
-			view_text = "瞭望：" + str(vantages[vantage]["name"])
+			if vantage_fallback:
+				view_text = "%d · %s（建筑遮挡，临时跟踪机位）" % [vantage + 2, vantages[vantage]["name"]]
+			else:
+				view_text = "%d · %s" % [vantage + 2, vantages[vantage]["name"]]
 	var loop_text := "循环：开" if loop_enabled else "循环：关"
-	label.text = "东海道新干线 · 东京 → 品川 · 本地版\n里程：%.2f / %.2f km    速度：285 km/h\n范围：轨道两侧各 500 m    航空影像：Z18\n资源：%d / %d    状态：%s    循环：%s\n视角：%s\nSpace：暂停/继续    R：重新预览    C：驾驶室视角    V：切换瞭望视角    L：切换循环\n无需网络／无需 Cesium Token（命令行加 --offline-loop 启动即循环）" % [mileage / 1000, distances[-1] / 1000, loaded, assets.size(), status, loop_text, view_text]
+	label.text = "东海道新干线 · 东京 → 品川 · 本地版\n里程：%.2f / %.2f km    速度：285 km/h\n范围：轨道两侧各 500 m    航空影像：Z18\n资源：%d / %d    状态：%s    循环：%s\n视角：%s\n1/2/3/4：跟踪 / 俯视拍摄 / 跟随瞭望 / 驾驶室    Space：暂停/继续    R：重新预览    C：驾驶室视角    V：切换瞭望视角    L：切换循环\nCtrl+Shift+F/G：小地图 / 提示面板    无需 Cesium Token" % [mileage / 1000, distances[-1] / 1000, loaded, assets.size(), status, loop_text, view_text]
 	var total_distance := float(distances[-1])
 	var progress_percent := 100.0 * mileage / total_distance
 	progress_label.text = '%d m / %d m' % [roundi(mileage), roundi(total_distance)]
 	progress_slider.editable = ready_for_trip
 	progress_slider.set_value_no_signal(progress_percent)
+	mini_map.set_mileage(mileage)
 
 func _seek_to_progress(percent: float) -> void:
 	if not ready_for_trip or distances.is_empty() or distances[-1] <= 0.0:
@@ -560,6 +679,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		panel.visible = not panel.visible
 		get_viewport().set_input_as_handled()
 		return
+	if event.keycode == KEY_F and event.ctrl_pressed and event.shift_pressed and not event.alt_pressed and not event.meta_pressed:
+		mini_map.visible = not mini_map.visible
+		get_viewport().set_input_as_handled()
+		return
 	if not ready_for_trip:
 		return
 	if event.keycode == KEY_C:
@@ -570,6 +693,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		mileage = 0.0
 		paused = false
 		_update_position()
+	elif event.keycode >= KEY_1 and event.keycode <= KEY_4:
+		_set_view(event.keycode - KEY_1)
 	elif event.keycode == KEY_V:
 		if cab_view:
 			_set_cab_view(false)

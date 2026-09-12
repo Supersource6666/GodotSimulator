@@ -27,6 +27,7 @@ func _test() -> void:
 	key.shift_pressed = true
 	preview._unhandled_key_input(key)
 	assert(not preview.panel.visible)
+	assert(preview.mini_map.visible)
 	key.echo = true
 	preview._unhandled_key_input(key)
 	assert(not preview.panel.visible)
@@ -37,14 +38,24 @@ func _test() -> void:
 	key.pressed = true
 	preview._unhandled_key_input(key)
 	assert(preview.panel.visible)
+	assert(preview.mini_map.visible)
 	key.shift_pressed = false
 	preview._unhandled_key_input(key)
 	assert(preview.panel.visible)
-	# Bottom credits are a sibling, not a child of the hidden panel.
+	# Bottom journey controls are a sibling, not a child of the hidden panels.
 	key.shift_pressed = true
 	preview._unhandled_key_input(key)
-	var credits := preview.panel.get_parent().get_child(1) as Label
-	assert(credits.is_visible_in_tree())
+	var progress_track := preview.panel.get_parent().get_node("JourneyProgressTrack") as VBoxContainer
+	assert(progress_track.is_visible_in_tree())
+	assert(not preview.panel.visible)
+	assert(preview.mini_map.visible)
+	key.keycode = KEY_F
+	preview._unhandled_key_input(key)
+	assert(not preview.mini_map.visible)
+	assert(not preview.panel.visible)
+	preview._unhandled_key_input(key)
+	assert(preview.mini_map.visible)
+	assert(not preview.panel.visible)
 	preview.free()
-	print("OFFLINE_HUD_TEST PASS: toggle, loading, repeat, release, modifiers, credits")
+	print("OFFLINE_HUD_TEST PASS: independent status/minimap toggles, repeat, release, modifiers")
 	quit(0)

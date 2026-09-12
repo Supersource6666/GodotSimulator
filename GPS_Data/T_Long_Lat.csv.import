@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://8yg161nbqvmr"
+
+[deps]
+
+files=["res://GPS_Data/T_Long_Lat.latitude.translation", "res://GPS_Data/T_Long_Lat.longitude.translation"]
+
+source_file="res://GPS_Data/T_Long_Lat.csv"
+dest_files=["res://GPS_Data/T_Long_Lat.latitude.translation", "res://GPS_Data/T_Long_Lat.longitude.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
