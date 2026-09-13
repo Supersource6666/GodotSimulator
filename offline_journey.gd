@@ -85,6 +85,10 @@ var camera: Camera3D
 var cab_interior: Node3D
 var cab_speedometer: Control
 var cab_view := false
+var wheel_view := false
+var wheel_readout: Label
+var wheel_light: OmniLight3D
+var wheel_inspection := preload("res://wheel_inspection.gd").new()
 var speed_profile = SPEED_PROFILE_SCRIPT.new()
 var train: Node3D
 var _train_front_offset: float = 0.0
@@ -93,6 +97,7 @@ var panel: PanelContainer
 var mini_map: Control
 var progress_label: Label
 var progress_slider: HSlider
+var loading_overlay: Control
 var started_ms := 0
 var manifest: Dictionary
 var memory_at_ready := 0
@@ -212,6 +217,13 @@ func _setup_scene() -> void:
 	camera.fov = 48.0
 	camera.current = true
 	add_child(camera)
+	wheel_light = OmniLight3D.new()
+	wheel_light.name = "WheelInspectionLight"
+	wheel_light.light_energy = 4.0
+	wheel_light.omni_range = 7.0
+	wheel_light.shadow_enabled = false
+	wheel_light.visible = false
+	camera.add_child(wheel_light)
 	cab_interior = load("res://cab_interior.gd").new()
 	cab_interior.name = "CabInterior"
 	cab_interior.visible = false
@@ -278,8 +290,27 @@ func _setup_scene() -> void:
 	progress_track.add_child(progress_slider)
 	mini_map = preload("res://mini_map_panel.gd").new()
 	canvas.add_child(mini_map)
+	var wheel_panel := PanelContainer.new()
+	wheel_panel.name = "WheelInspectionPanel"
+	canvas.add_child(wheel_panel)
+	wheel_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	wheel_panel.offset_left = -490.0
+	wheel_panel.offset_right = -20.0
+	wheel_panel.offset_top = 20.0
+	wheel_panel.add_theme_stylebox_override("panel", style.duplicate())
+	wheel_readout = Label.new()
+	wheel_readout.add_theme_font_size_override("font_size", 18)
+	wheel_panel.add_child(wheel_readout)
+	wheel_panel.hide()
+	var loading_canvas := CanvasLayer.new()
+	loading_canvas.layer = 10
+	add_child(loading_canvas)
+	loading_overlay = preload("res://offline_loading.gd").new()
+	loading_overlay.name = "OfflineLoading"
+	loading_canvas.add_child(loading_overlay)
 
 func _load_step() -> void:
+	loading_overlay.set_progress(loaded, assets.size())
 	while pending.size() < 4 and requested < assets.size():
 		var path: String = "res://" + str(assets[requested].path)
 		if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
@@ -319,6 +350,7 @@ func _load_step() -> void:
 							material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 			pending.erase(path)
 			loaded += 1
+			loading_overlay.set_progress(loaded, assets.size())
 			break # Budget one scene instantiation per frame; no frame-spanning loop.
 	if loaded == assets.size() and train.ready_for_preview:
 		if not camera_collisions_ready:
@@ -327,6 +359,7 @@ func _load_step() -> void:
 				_finish_camera_collision_setup()
 			return
 		ready_for_trip = true
+		loading_overlay.finish()
 		_update_position()
 		memory_at_ready = OS.get_static_memory_usage()
 		print("OFFLINE_READY assets=", loaded, " route_m=", distances[-1],
@@ -588,11 +621,16 @@ func _update_position(delta: float = 0.0) -> void:
 	train.position = point
 	train.look_at(point + heading, Vector3.UP)
 	train.anchor_distance = train_anchor
-	train.set_cab_view(cab_view)
+	train.set_cab_view(cab_view or wheel_view)
+	wheel_readout.get_parent().visible = wheel_view
+	wheel_light.visible = wheel_view
 	cab_interior.visible = cab_view
 	cab_speedometer.visible = cab_view
 	camera.near = 0.08 if cab_view else 0.5
 	camera.fov = 64.0 if cab_view else 48.0
+	if wheel_view:
+		_update_wheel_camera()
+		return
 	if cab_view:
 		camera_guard.blocked = false
 		camera_guard.adjusted = false
@@ -655,7 +693,32 @@ func _update_position(delta: float = 0.0) -> void:
 	# A fully shortened camera may look straight down at the route endpoint.
 	camera.look_at(aim, heading if absf(direction.dot(Vector3.UP)) > 0.98 else Vector3.UP)
 
+func _update_wheel_camera() -> void:
+	# Apply this frame's car poses before reading a wheel mount, avoiding camera lag.
+	train._apply_route_poses()
+	if train.wheels.is_empty():
+		return
+	var wheel: Node3D = train.wheels[0]
+	# _fit centers the mount laterally/longitudinally at the model's lowest point.
+	var bottom: Vector3 = wheel.get_parent().global_position
+	var alignment: Dictionary = wheel_inspection.measure(bottom, route)
+	if alignment.is_empty():
+		return
+	var right: Vector3 = alignment.right
+	var forward: Vector3 = alignment.forward
+	camera_guard.blocked = false
+	camera_guard.adjusted = false
+	camera_guard.partial_view = false
+	camera_guard.initialized = false
+	camera.near = 0.03
+	camera.fov = 45.0
+	camera.position = bottom + right * 2.8 + forward * 1.8 + Vector3.UP * 0.95
+	camera.look_at(bottom + right * 0.35 + Vector3.UP * 0.28, Vector3.UP)
+	wheel_readout.text = "5 · 头车第一轮对\n几何横偏：%+.1f mm（右正 / 左负）\n基准：轮对中心相对线路中心\n仅模型对轨检查；未计算动态横移或接触力\nSpace 暂停观察 · 底部拖动里程 · 1–4 切换视角" % float(alignment.lateral_mm)
+
+
 func _set_cab_view(enabled: bool) -> void:
+	wheel_view = false
 	cab_view = enabled
 	vantage = -1
 	camera_guard.blocked = false
@@ -670,8 +733,15 @@ func _set_cab_view(enabled: bool) -> void:
 	_refresh_ui()
 
 func _set_view(index: int) -> void:
-	# 1=跟踪、2=俯视拍摄、3=跟随瞭望、4=驾驶室；与 V/C 循环保持同一套状态。
+	# 1=跟踪、2=俯视、3=瞭望、4=驾驶室、5=轮对观察。
 	if not ready_for_trip:
+		return
+	wheel_view = index == 4
+	if wheel_view:
+		cab_view = false
+		vantage = -1
+		_update_position()
+		_refresh_ui()
 		return
 	if index <= 0 or index >= 3:
 		_set_cab_view(index >= 3)
@@ -709,8 +779,10 @@ func _refresh_ui() -> void:
 				view_text = "%d · %s（建筑遮挡，临时跟踪机位）" % [vantage + 2, vantages[vantage]["name"]]
 			else:
 				view_text = "%d · %s" % [vantage + 2, vantages[vantage]["name"]]
+	if wheel_view:
+		view_text = "5 · 轮对观察（头车第一轮对）"
 	var loop_text := "循环：开" if loop_enabled else "循环：关"
-	label.text = "东海道新干线 · 东京 → 品川 · 本地版\n里程：%.2f / %.2f km    速度：285 km/h\n范围：轨道两侧各 500 m    航空影像：Z18\n资源：%d / %d    状态：%s    循环：%s\n视角：%s\n1/2/3/4：跟踪 / 俯视拍摄 / 跟随瞭望 / 驾驶室    Space：暂停/继续    R：重新预览    C：驾驶室视角    V：切换瞭望视角    L：切换循环\nF：切换网格模式    Ctrl+Shift+F/G：小地图 / 提示面板    无需 Cesium Token" % [mileage / 1000, distances[-1] / 1000, loaded, assets.size(), status, loop_text, view_text]
+	label.text = "东海道新干线 · 东京 → 品川 · 本地版\n里程：%.2f / %.2f km    速度：285 km/h\n范围：轨道两侧各 500 m    航空影像：Z18\n资源：%d / %d    状态：%s    循环：%s\n视角：%s\n1/2/3/4/5：跟踪 / 俯视拍摄 / 跟随瞭望 / 驾驶室 / 轮对观察    Space：暂停/继续    R：重新预览    C：驾驶室视角    V：切换瞭望视角    L：切换循环\nF：切换网格模式    Ctrl+Shift+F/G：小地图 / 提示面板    无需 Cesium Token" % [mileage / 1000, distances[-1] / 1000, loaded, assets.size(), status, loop_text, view_text]
 	var total_distance := float(distances[-1])
 	var progress_percent := 100.0 * mileage / total_distance
 	progress_label.text = '%d m / %d m' % [roundi(mileage), roundi(total_distance)]
@@ -767,10 +839,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		mileage = 0.0
 		paused = false
 		_update_position()
-	elif event.keycode >= KEY_1 and event.keycode <= KEY_4:
+	elif event.keycode >= KEY_1 and event.keycode <= KEY_5:
 		_set_view(event.keycode - KEY_1)
 	elif event.keycode == KEY_V:
-		if cab_view:
+		if cab_view or wheel_view:
 			_set_cab_view(false)
 		vantage += 1
 		if vantage >= vantages.size():
@@ -786,6 +858,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _fail(message: String) -> void:
 	failed = true
+	if loading_overlay != null:
+		loading_overlay.show_error(message)
 	label.text = "本地加载停止\n" + message
 	push_error(message)
 	if "--offline-test" in OS.get_cmdline_user_args() or "--demo-smoke-test" in OS.get_cmdline_user_args():
