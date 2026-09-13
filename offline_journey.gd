@@ -3,6 +3,8 @@ extends Node3D
 ## All finest-detail assets are resident before motion; native building BVH queries.
 
 const MANIFEST := "res://offline_data/manifest.json"
+const SPEED_PROFILE_PATH := "res://GPS_Data/speed_1.csv"
+const SPEED_PROFILE_SCRIPT := preload("res://speed_profile.gd")
 const SPEED := 285.0 / 3.6
 # 离线桥/轨视觉层：由参考工程的生成器最小适配而来。
 const TRACK_GENERATOR_SCRIPT := preload("res://assets/procedural/track_generator.gd")
@@ -27,9 +29,41 @@ const CONFLICT_MILEAGE_C_M := 1718.0
 const CONFLICT_MILEAGE_A_M := 3236.0
 const CONFLICT_MILEAGE_B_M := 4579.0
 const CONFLICT_CLIP_RADIUS_M := 2.0
-const LEVEL_CROSSING_CENTERS_M := [2326.0, 2915.0, 3837.0]
+const LEVEL_CROSSING_CENTERS_M := [2407.0, 3008.0, 3924.0]
 const LEVEL_CROSSING_HALF_LENGTH_M := 65.0
 const LEVEL_CROSSING_TRANSITION_M := 60.0
+# 第三座廊桥前移至 3924 m；顶板与轨道基层标高衔接，通道埋入地面以下。
+const GALLERY_CONFIGS := [
+	{
+		"center_m": 2407.0,
+		"half_span_m": 42.0,
+		"inner_width_m": 30.0,
+		"roof_top_below_rail_m": 0.42,
+		"clear_height_m": 4.5,
+		"wall_thickness_m": 0.30,
+		"floor_thickness_m": 0.35,
+		"roof_thickness_m": 0.30,
+	},
+	{
+		"center_m": 3008.0,
+		"half_span_m": 65.0,
+		"roof_top_below_rail_m": 0.42,
+		"clear_height_m": 4.5,
+		"floor_thickness_m": 0.35,
+		"roof_thickness_m": 0.30,
+	},
+	{
+		"center_m": 3924.0,
+		"half_span_m": 42.0,
+		# 沿轨道方向扩大，以覆盖截图蓝框所示的地面凹陷范围。
+		"inner_width_m": 30.0,
+		"roof_top_below_rail_m": 0.42,
+		"clear_height_m": 4.5,
+		"wall_thickness_m": 0.30,
+		"floor_thickness_m": 0.35,
+		"roof_thickness_m": 0.30,
+	},
+]
 # 视觉采样（桥/轨/接触网）朝向的切线基线；过短会放大点位抖动。
 var route := PackedVector3Array()
 var distances := PackedFloat64Array()
@@ -49,7 +83,9 @@ var max_process_ms := 0.0
 var test_frames := 0
 var camera: Camera3D
 var cab_interior: Node3D
+var cab_speedometer: Control
 var cab_view := false
+var speed_profile = SPEED_PROFILE_SCRIPT.new()
 var train: Node3D
 var _train_front_offset: float = 0.0
 var label: Label
@@ -182,6 +218,12 @@ func _setup_scene() -> void:
 	camera.add_child(cab_interior)
 	var canvas := CanvasLayer.new()
 	add_child(canvas)
+	cab_speedometer = load("res://cab_speedometer.gd").new()
+	cab_speedometer.name = "CabSpeedometer"
+	cab_speedometer.visible = false
+	canvas.add_child(cab_speedometer)
+	if not speed_profile.load_csv(SPEED_PROFILE_PATH):
+		push_warning("Speed profile unavailable: %s" % SPEED_PROFILE_PATH)
 	panel = PanelContainer.new()
 	panel.position = Vector2(360, 20)
 	panel.custom_minimum_size = Vector2(555, 0)
@@ -193,6 +235,7 @@ func _setup_scene() -> void:
 	style.content_margin_bottom = 12
 	panel.add_theme_stylebox_override("panel", style)
 	canvas.add_child(panel)
+	panel.visible = false
 	var column := VBoxContainer.new()
 	panel.add_child(column)
 	label = Label.new()
@@ -368,7 +411,7 @@ func _build_offline_corridor() -> void:
 	var gallery = COVERED_GALLERY_SCRIPT.new()
 	gallery.name = "LevelCrossingGalleries"
 	corridor.add_child(gallery)
-	gallery.build(LEVEL_CROSSING_CENTERS_M, LEVEL_CROSSING_HALF_LENGTH_M, _route_pose_sample)
+	gallery.build(GALLERY_CONFIGS, _route_pose_sample)
 
 
 func _build_route_samples() -> Array[Dictionary]:
@@ -547,6 +590,7 @@ func _update_position(delta: float = 0.0) -> void:
 	train.anchor_distance = train_anchor
 	train.set_cab_view(cab_view)
 	cab_interior.visible = cab_view
+	cab_speedometer.visible = cab_view
 	camera.near = 0.08 if cab_view else 0.5
 	camera.fov = 64.0 if cab_view else 48.0
 	if cab_view:
@@ -620,6 +664,8 @@ func _set_cab_view(enabled: bool) -> void:
 		train.set_cab_view(enabled)
 	if cab_interior != null:
 		cab_interior.visible = enabled
+	if cab_speedometer != null:
+		cab_speedometer.visible = enabled
 	_update_position()
 	_refresh_ui()
 
@@ -671,6 +717,14 @@ func _refresh_ui() -> void:
 	progress_slider.editable = ready_for_trip
 	progress_slider.set_value_no_signal(progress_percent)
 	mini_map.set_mileage(mileage)
+	if cab_speedometer != null:
+		cab_speedometer.set_reading(_speed_at_mileage(mileage), mileage)
+
+
+func _speed_at_mileage(distance_m: float) -> float:
+	if distances.is_empty() or distances[-1] <= 0.0:
+		return 0.0
+	return speed_profile.sample_progress(distance_m / distances[-1])
 
 func _seek_to_progress(percent: float) -> void:
 	if not ready_for_trip or distances.is_empty() or distances[-1] <= 0.0:

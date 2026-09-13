@@ -72,6 +72,12 @@ func _run() -> void:
 	assert(offline_shell != null and offline_shell.visible)
 	offline._set_cab_view(true)
 	assert(offline.cab_view and offline.cab_interior.visible)
+	assert(offline.cab_speedometer.visible)
+	assert(offline.speed_profile.speeds.size() == 1551)
+	offline.mileage = 500.0
+	offline._refresh_ui()
+	assert(is_equal_approx(offline.cab_speedometer.speed_kmh, offline._speed_at_mileage(500.0)))
+	assert(is_equal_approx(offline.cab_speedometer.distance_km, 0.5))
 	var offline_overlay := offline.cab_interior.get_node("CabOverlay") as Sprite3D
 	assert(offline_overlay != null and offline_overlay.texture != null and offline_overlay.no_depth_test)
 	_assert_overlay_covers_viewport(offline.cab_interior, offline.camera)
@@ -86,6 +92,7 @@ func _run() -> void:
 	assert(not offline_shell.visible)
 	offline._set_cab_view(false)
 	assert(not offline.cab_interior.visible and offline_shell.visible)
+	assert(not offline.cab_speedometer.visible)
 	preview.free()
 	offline.free()
 	print("CAB_VIEW_TEST PASS: online/offline toggle, cab pose, interior and lead shell visibility")

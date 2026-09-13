@@ -20,36 +20,35 @@ func _test() -> void:
 	assert(environment.tonemap_mode == Environment.TONE_MAPPER_ACES)
 	assert(environment.adjustment_enabled and environment.adjustment_contrast > 1.0)
 	assert(is_equal_approx(preview.CONFLICT_MILEAGE_C_M, 1718.0))
-	assert(preview.panel.visible and not preview.ready_for_trip)
+	assert(not preview.panel.visible and not preview.ready_for_trip)
 	var key := InputEventKey.new()
 	key.keycode = KEY_G
 	key.pressed = true
 	key.ctrl_pressed = true
 	key.shift_pressed = true
 	preview._unhandled_key_input(key)
-	assert(not preview.panel.visible)
+	assert(preview.panel.visible)
 	assert(preview.mini_map.visible)
 	key.echo = true
 	preview._unhandled_key_input(key)
-	assert(not preview.panel.visible)
+	assert(preview.panel.visible)
 	key.echo = false
 	key.pressed = false
 	preview._unhandled_key_input(key)
-	assert(not preview.panel.visible)
+	assert(preview.panel.visible)
 	key.pressed = true
 	preview._unhandled_key_input(key)
-	assert(preview.panel.visible)
+	assert(not preview.panel.visible)
 	assert(preview.mini_map.visible)
 	key.shift_pressed = false
 	preview._unhandled_key_input(key)
-	assert(preview.panel.visible)
+	assert(not preview.panel.visible)
 	# Bottom journey controls are a sibling, not a child of the hidden panels.
-	key.shift_pressed = true
-	preview._unhandled_key_input(key)
 	var progress_track := preview.panel.get_parent().get_node("JourneyProgressTrack") as VBoxContainer
 	assert(progress_track.is_visible_in_tree())
 	assert(not preview.panel.visible)
 	assert(preview.mini_map.visible)
+	key.shift_pressed = true
 	key.keycode = KEY_F
 	preview._unhandled_key_input(key)
 	assert(not preview.mini_map.visible)
