@@ -4,8 +4,7 @@ Data © OpenStreetMap contributors, licensed under ODbL 1.0:
 https://www.openstreetmap.org/copyright
 
 The Overpass snapshot contains standard-gauge railways in the station corridor.
-Run `node tests/build_track_route.cjs` from the project root to rebuild the
-cached route. Only connected ways named 東海道新幹線 with no service tag are used;
+The committed cached route uses only connected ways named 東海道新幹線 with no service tag;
 the route connects track nodes near Tokyo and Shinagawa (170 nodes, about 6.7 km).
 This is a visualization alignment, not a dispatcher-approved running path.
 

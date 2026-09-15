@@ -24,8 +24,6 @@ attempts for transient transport failures / HTTP 408, 429 and 5xx; no signed
 URLs in the new transport error message. Published preview_geometric_error
 metadata lets journey.gd reject coarse or unknown-detail tiles.
 
-Controlled retry test: tests/serve_retry_tile.cjs returned HTTP 503 twice for
-tileset.json, and dropped the first original.glb connection. The new DLL
-loaded them on attempts 3 and 2 respectively. Same-GLB comparison still
-matched vertex positions and topology. Shutdown dependency warnings remain;
-these changes do not claim to fix native resource teardown.
+The retry behavior was validated against repeated HTTP 503 responses and a
+dropped GLB connection. Shutdown dependency warnings remain; these changes do
+not claim to fix native resource teardown.

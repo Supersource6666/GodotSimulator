@@ -1,13 +1,51 @@
-cesium_token.txt
-google_maps_api_key.txt
-.godot/
-appdata/
+# Godot editor/import cache and generated translation resources.
+/.godot/
+*.translation
+
+# Local credentials and runtime state.
+/cesium_token.txt
+/google_maps_api_key.txt
+/appdata/
 *.log
+
+# Generated captures and diagnostic images.
+/offline-preview.png
+/offline-preview.png.import
+/cab-preview.png
+/cab-preview.png.import
+/wheel-preview.png
+/wheel-preview.png.import
+/train-diagnostic.png
+/train-diagnostic.png.import
+/screenshots/
+/captures/
 
 # Offline assets are distributed separately; keep manifests and build scripts.
 /offline_data/models/
 /offline_data/sources/
 
-# Python bytecode caches.
-__pycache__/
+# Tests and language-tool caches.
+/tests/
+/test-results/
+
+# Python, Node and test-tool caches.
+**/__pycache__/
 *.py[cod]
+/.pytest_cache/
+/node_modules/
+/coverage/
+/.coverage
+
+# IDE and operating-system metadata.
+/.idea/
+/.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary and backup files.
+*.tmp
+*.temp
+*.bak
+*.old
+*~

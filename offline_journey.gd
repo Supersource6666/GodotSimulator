@@ -620,7 +620,7 @@ func _update_position(delta: float = 0.0) -> void:
 	heading = heading.normalized()
 	train.position = point
 	train.look_at(point + heading, Vector3.UP)
-	train.anchor_distance = train_anchor
+	train.set_anchor_distance(train_anchor)
 	train.set_cab_view(cab_view or wheel_view)
 	wheel_readout.get_parent().visible = wheel_view
 	wheel_light.visible = wheel_view
@@ -699,7 +699,7 @@ func _update_wheel_camera() -> void:
 	if train.wheels.is_empty():
 		return
 	var wheel: Node3D = train.wheels[0]
-	# _fit centers the mount laterally/longitudinally at the model's lowest point.
+	# The axle pivot's parent remains at the stationary wheel-bottom reference.
 	var bottom: Vector3 = wheel.get_parent().global_position
 	var alignment: Dictionary = wheel_inspection.measure(bottom, route)
 	if alignment.is_empty():

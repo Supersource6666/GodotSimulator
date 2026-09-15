@@ -16,6 +16,7 @@ const BOGIE_HALF_SPACING_M := 8.5   # 转向架距车厢中心的距离
 const BOGIE_SIZE := Vector3(2.5, 0.75, 4.0)
 const BOGIE_BOTTOM_Y := 0.65
 const WHEEL_SIZE := Vector3(2.2, 0.86, 0.86)
+const WHEEL_RADIUS_M := WHEEL_SIZE.y * 0.5
 const WHEEL_AXLE_HALF_M := 1.25
 const BODY_BRIGHTNESS_SCALE := 0.78 # Only bright neutral body paint, not the city.
 const BODY_MIN_ROUGHNESS := 0.42
@@ -59,6 +60,12 @@ func set_pose_source(provider: Callable) -> void:
 
 func set_anchor_distance(distance: float) -> void:
 	anchor_distance = distance
+	# No-slip rolling: theta = integral(v dt) / r = travel / r.
+	# Absolute chainage also makes seeks, restarts and rejected moves deterministic.
+	for index in range(wheels.size()):
+		var travel := maxf(distance + _car_mile_offsets[index / 4], 0.0)
+		# Cars move along local -Z, so rolling is negative around local +X.
+		wheels[index].rotation.x = -fposmod(travel / WHEEL_RADIUS_M, TAU)
 
 
 
@@ -115,7 +122,20 @@ func _add_running_gear(car: Node3D) -> void:
 			car.add_child(wheel)
 			wheel.rotation.y = -PI / 2.0
 			_fit(wheel, WHEEL_SIZE, Vector3(0, 0, bogie_z + axle), car)
-			wheels.append(wheel)
+			# Keep a stationary bottom mount for inspection. Rotate outside the
+			# fitted model's nonuniform scale, about the axle at half wheel height.
+			var fitted_mount := wheel.get_parent() as Node3D
+			var bottom_mount := Node3D.new()
+			bottom_mount.name = "WheelMount%d" % wheels.size()
+			car.add_child(bottom_mount)
+			bottom_mount.position = Vector3(0, 0, bogie_z + axle)
+			var pivot := Node3D.new()
+			pivot.name = "WheelAxle"
+			bottom_mount.add_child(pivot)
+			pivot.position.y = WHEEL_RADIUS_M
+			fitted_mount.reparent(pivot)
+			fitted_mount.position = Vector3(0, -WHEEL_RADIUS_M, 0)
+			wheels.append(pivot)
 
 
 func _new_model(path: String) -> Node3D:

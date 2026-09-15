@@ -1,13 +1,17 @@
-param(
-    [string]$GodotPath = 'C:\GodotEngine\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe',
+﻿param(
+    [string]$GodotPath = 'E:\Godot_v4.7\Godot_v4.7-stable_win64_console.exe',
     [switch]$SmokeTest,
     [switch]$Terrain,
     [switch]$Local,
+    [ValidateSet('City', 'Countryside', '市区内', '郊外')]
+    [string]$LocalScene,
+    [string]$ExternalProject = 'E:\game_project',
     [switch]$Loop,
     [switch]$Cab
 )
 
 $ErrorActionPreference = 'Stop'
+if ($LocalScene -and -not $Local) { throw '-LocalScene requires -Local.' }
 if (-not (Test-Path -LiteralPath $GodotPath -PathType Leaf)) {
     throw 'Godot executable not found. Supply -GodotPath.'
 }
@@ -24,9 +28,16 @@ try {
         Write-Host 'Using the configured Windows proxy for Cesium downloads.'
     }
     $previewArgs = @('--path', $PSScriptRoot)
-    if ($Local) { $previewArgs += 'res://offline.tscn' }
+    if ($Local) { $previewArgs += 'res://local.tscn' }
     if ($SmokeTest) { $previewArgs += '--headless' }
     $previewArgs += '--'
+    if ($Local) {
+        $previewArgs += '--external-project=' + $ExternalProject.Replace('\', '/')
+        if ($LocalScene) {
+            $sceneKey = if ($LocalScene -in @('City', '市区内')) { 'city' } else { 'countryside' }
+            $previewArgs += '--local-scene=' + $sceneKey
+        }
+    }
     if ($SmokeTest) { $previewArgs += '--demo-smoke-test' }
     if ($Terrain) { $previewArgs += '--terrain-preview' }
     if ($Loop) { $previewArgs += '--offline-loop' }

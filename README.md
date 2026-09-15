@@ -19,6 +19,26 @@ cd E:\GodotSimulator
 powershell -ExecutionPolicy Bypass -File .\run-preview.ps1 -Local
 ```
 
+`-Local` 现在先显示“市区内 / 郊外”选择界面：市区内为东京—品川，郊外为大糸线大町。
+也可以跳过选择界面直接启动：
+
+```powershell
+.\run-preview.ps1 -Local -LocalScene City
+.\run-preview.ps1 -Local -LocalScene Countryside
+# 中文参数同样支持：-LocalScene 市区内 / -LocalScene 郊外
+```
+
+郊外默认启用轨道、第三人称视角，速度 20 m/s（72 km/h），等效于原外部场景的启动参数。
+原场景、脚本、GLB、着色器及数据包均从 `E:/game_project` 读取，不复制或重新导入到当前项目。
+其中数据包为 `train/data/offline_oito_omachi`；外部目录移动后可用
+`-ExternalProject '新的项目根目录'` 指定。运行期间需要保持原目录可访问。
+适配器只在内存中映射资源路径；原预览已禁用的列车物理控制脚本以空脚本替代，避免依赖外部项目单例。
+郊外沿用原操作：`M` 切换视角，按住 `P` 暂停，`+/-` 调速，`W` 线框；`-Cab` 可从驾驶视角启动。
+
+验证启动入口：`.\run-preview.ps1 -Local -LocalScene Countryside -SmokeTest`。
+不指定 `-LocalScene` 的 `-Local -SmokeTest` 默认验证市区内，以免自动测试停在选择界面。
+默认引擎路径为 `E:/Godot_v4.7/Godot_v4.7-stable_win64_console.exe`，可通过 `-GodotPath` 覆盖。
+
 首次制作、下载中断后续传或重新导入资源：
 
 ```powershell
@@ -65,8 +85,7 @@ Last-Modified 等规则复用或重新验证资源，不强行缓存 no-store、
 网格变更时失效、卸载后清理。缺少查询结构时保持暂停，不降低近景门槛。
 单个特别大的兜底模型仍可能超过帧预算。
 
-验证：python tests/cache_inventory.py
-仅输出缓存数量与容量，不输出签名 URL。
+缓存位于 Godot 用户数据目录，不提交到仓库。
 
 Windows 推荐执行 `powershell -File .\run-preview.ps1`。启动器会将已经配置的系统代理传给插件的 libcurl 下载器，不修改系统代理设置。`-Terrain` 切回航拍地形模式，`-SmokeTest` 执行 30 秒无界面加载测试，`-GodotPath` 指定其他引擎路径，`-Cab` 可直接从驾驶室视角启动。直接调用 Godot 时也可在 `--` 后传入 `--cab-view`。直接从未继承代理环境的编辑器运行，Google 数据可能无法下载。
 
@@ -82,6 +101,4 @@ Windows 推荐执行 `powershell -File .\run-preview.ps1`。启动器会将已�
 
 当前插件在地理参考模式下按地理原点选择瓦片，因此脚本让地理原点跟随相机，局部相机位置保持为零。`forbid_holes` 用于等待子瓦片时保留父瓦片。原生插件的资源释放警告仍需单独诊断，不能视为已经修复。
 
-司机视角验证：`Godot --headless --path . --script res://tests/cab_view.gd`。
-
-验证命令：`Godot --headless --path . --script res://tests/preview_configuration.gd`；数据加载测试：`Godot --headless --path . -- --demo-smoke-test`。
+数据加载冒烟检查可通过 `run-preview.ps1 -Local -SmokeTest` 执行。
