@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "route": {
+    "name": "东海道新干线",
+    "section": "东京 → 品川",
+    "operator": "JR 东海",
+    "distance_m": 6689,
+    "max_speed_kmh": 285,
+    "directions": [
+      { "key": "down", "label": "下り 东京 → 品川", "simulated": true },
+      { "key": "up", "label": "上り 品川 → 东京", "simulated": false }
+    ]
+  },
+  "services": [
+    { "key": "nozomi", "name": "のぞみ", "label": "希望号", "speed_kmh": 285, "cars": 16 },
+    { "key": "hikari", "name": "ひかり", "label": "光号", "speed_kmh": 275, "cars": 16 },
+    { "key": "kodama", "name": "こだま", "label": "回声号", "speed_kmh": 285, "cars": 16 },
+    { "key": "test", "name": "試運転", "label": "试运转", "speed_kmh": 240, "cars": 8 },
+    { "key": "custom", "name": "回送", "label": "自定义", "speed_kmh": 200, "cars": 8 }
+  ],
+  "stations": [
+    {
+      "name": "东京",
+      "en": "Tokyo",
+      "code": "TYO",
+      "chainage_m": 0,
+      "platform": "14番線",
+      "platforms": ["13番線", "14番線", "15番線", "16番線"],
+      "dwell_s": 90,
+      "origin": true
+    },
+    {
+      "name": "品川",
+      "en": "Shinagawa",
+      "code": "SGW",
+      "chainage_m": 6330,
+      "platform": "23番線",
+      "platforms": ["21番線", "22番線", "23番線", "24番線"],
+      "dwell_s": 90,
+      "terminal": true
+    }
+  ]
+}

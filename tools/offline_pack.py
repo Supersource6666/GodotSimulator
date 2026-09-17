@@ -40,7 +40,7 @@ ENU = np.array([[-math.sin(LON_R), math.cos(LON_R), 0],
                 [math.cos(LAT_R)*math.cos(LON_R), math.cos(LAT_R)*math.sin(LON_R), math.sin(LAT_R)],
                 [math.sin(LAT_R)*math.cos(LON_R), math.sin(LAT_R)*math.sin(LON_R), -math.cos(LAT_R)]])
 Y_TO_Z = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], dtype=float)
-SSL = ssl.create_default_context(cafile=str(ROOT / "addons/cesium_godot/resources/cacert.pem"))
+SSL = ssl.create_default_context(cafile=str(ROOT / "tools/cacert.pem"))
 
 def save_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)

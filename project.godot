@@ -15,13 +15,14 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Tokyo-Shinagawa Terrain Preview"
-run/main_scene="res://main.tscn"
+local_scenes/default_id="urban"
+run/main_scene="res://app/local.tscn"
 config/features=PackedStringArray("4.7")
 boot_splash/show_image=false
 
-[cesium]
+[autoload]
 
-prepare_query_meshes=true
+DispatchContext="*res://app/dispatch_context.gd"
 
 [display]
 
@@ -29,10 +30,9 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/size/window_width_override=1280
 window/size/window_height_override=720
-
-[editor_plugins]
-
-enabled=PackedStringArray("res://addons/cesium_godot/plugin.cfg")
+window/size/resizable=true
+window/size/min_width=1024
+window/size/min_height=600
 
 [rendering]
 

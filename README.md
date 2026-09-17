@@ -1,4 +1,6 @@
-# 东京—品川站间地形预览
+# 铁路场景预览
+
+本地场景按 `scenes/urban/`（市区内）与 `scenes/outdoors/`（郊外）组织；`app/` 负责场景发现和选择，`shared/` 存放公共组件。新增模块只需添加入口和 `scene.cfg`，详见 [场景模块说明](scenes/README.md)。原有 City/Countryside 和中文启动别名继续支持。
 
 ## 本地加载版本（不需要网络和 Token）
 
@@ -19,12 +21,12 @@ cd E:\GodotSimulator
 powershell -ExecutionPolicy Bypass -File .\run-preview.ps1 -Local
 ```
 
-`-Local` 现在先显示“市区内 / 郊外”选择界面：市区内为东京—品川，郊外为大糸线大町。
+`-Local` 现在先显示"市区内 / 郊外"选择界面：市区内为东京—品川，郊外为大糸线大町。
 也可以跳过选择界面直接启动：
 
 ```powershell
-.\run-preview.ps1 -Local -LocalScene City
-.\run-preview.ps1 -Local -LocalScene Countryside
+.\run-preview.ps1 -Local -LocalScene urban
+.\run-preview.ps1 -Local -LocalScene outdoors
 # 中文参数同样支持：-LocalScene 市区内 / -LocalScene 郊外
 ```
 
@@ -35,7 +37,7 @@ powershell -ExecutionPolicy Bypass -File .\run-preview.ps1 -Local
 适配器只在内存中映射资源路径；原预览已禁用的列车物理控制脚本以空脚本替代，避免依赖外部项目单例。
 郊外沿用原操作：`M` 切换视角，按住 `P` 暂停，`+/-` 调速，`W` 线框；`-Cab` 可从驾驶视角启动。
 
-验证启动入口：`.\run-preview.ps1 -Local -LocalScene Countryside -SmokeTest`。
+验证启动入口：`.\run-preview.ps1 -Local -LocalScene outdoors -SmokeTest`。
 不指定 `-LocalScene` 的 `-Local -SmokeTest` 默认验证市区内，以免自动测试停在选择界面。
 默认引擎路径为 `E:/Godot_v4.7/Godot_v4.7-stable_win64_console.exe`，可通过 `-GodotPath` 覆盖。
 
@@ -56,49 +58,39 @@ powershell -ExecutionPolicy Bypass -File .\build-offline.ps1 -VerifyOnly
 轨道高度为平滑 DEM + 6 m 的视觉估计，不是实测铁路纵断面。
 数据来源、加工与高程缺测处理见 [offline_data/ATTRIBUTION.md](offline_data/ATTRIBUTION.md)。
 
-以下为原在线模式说明；不加 `-Local` 仍启动在线模式。
+## 列车调度台
 
-本工程使用 Cesium for Godot，仅预览东海道新干线的第一个站间段：
+选择本地场景后，会先进入"列车调度台"（参考 Libre TrainSim 的"选线路 → 编车次/时刻表 → 载入场景"流程），确认发车后才加载三维场景：
 
-东京站 → 品川站
+- 左侧配置运行参数：种别（のぞみ / ひかり / こだま…）、车次、编组、方向、出发时刻、最高速度。
+- 中间是车站时刻表：到点 / 发点 / 停车-通过 / 停靠时分 / 股道，下方是列车运行图（时间—里程图）。
+- 右侧是运行概要、前置检查与调度日志。
+- 确认发车后，方案写入 `DispatchContext` 单例，再载入对应模块；三维场景按同一份方案运行——按限速走行、到站停车、通过站不停车，并显示车内调度时刻表 HUD（`T` 切换）。
 
-时间压缩固定为 1×，参考东海道新干线最高运营速度 285 km/h。东京附近地形完成初始加载后自动发车，到达品川后停止。
+常用参数：
 
-## 地形数据
+```powershell
+.\run-preview.ps1 -LocalScene urban -TrainNumber 301 -Departure 06:00   # 指定车次与发车时刻
+.\run-preview.ps1 -LocalScene urban -SkipDispatch                        # 跳过调度台直接进场景
+.\run-preview.ps1 -LocalScene urban -PlanFile .\plan.json                # 使用现成方案文件
+.\run-preview.ps1 -DispatchTest                                          # 调度台冒烟测试（无头）
+```
 
-项目根目录的 `cesium_token.txt` 需要包含有效 Cesium ion Token。默认加载 Google Photorealistic 3D Tiles（资产 2275207），用于带建筑立面、树木等纹理的实景三维效果。需要该资产的访问权限，并能连接 Cesium ion 和 Google 瓦片服务；没有收到瓦片时会留在起点等待，不会自动换成航拍地形。
+车站里程、种别、方向、股道等由各模块的 `dispatch.json` 提供（`scene.cfg` 中用 `dispatch="dispatch.json"` 声明）。未提供车站数据的模块按"仅限速调度"运行，例如郊外大糸线只把限速传给外部场景，不执行停站。
 
-使用 `-- --terrain-preview` 启动参数可切回 World Terrain（1）+ Bing Aerial（2）+ PLATEAU（2602291）。此模式不等同于完整实景三维，不能仅靠提高 SSE 精度获得车辆、植被的摄影测量细节。
+## 启动与操作
 
-## 操作
+默认运行项目或执行 `.\run-preview.ps1` 均进入本地场景选择页；选中场景后先进入列车调度台，确认发车才加载三维场景。`-Local` 保留为兼容参数，可省略：
 
-### 磁盘缓存与检测性能
+```powershell
+.\run-preview.ps1 -LocalScene urban
+.\run-preview.ps1 -LocalScene outdoors
+.\run-preview.ps1 -LocalScene urban -SmokeTest
+.\run-preview.ps1 -LocalScene outdoors -SmokeTest
+```
 
-已修复真实 HTTP 响应头透传，SQLite 按服务端的 Cache-Control、ETag、
-Last-Modified 等规则复用或重新验证资源，不强行缓存 no-store、不修改过期时间。
-缓存位置为 %APPDATA%/Godot/app_userdata/Tokyo-Shinagawa Terrain Preview/cache。
-这是运行缓存，不是东京—品川全段的永久离线包；首次访问的新区域仍需要联网。
-更新原生 DLL 后请完全退出并重新启动 Godot。
+`-GodotPath` 指定引擎；`-ExternalProject` 指定郊外资源根目录；`-Cab` 从驾驶视角启动；`-Loop` 开启市区循环运行；`-SkipDispatch` 跳过调度台直接进场景；`-DispatchTest` 运行调度台冒烟测试；`-TrainNumber`/`-Departure`/`-PlanFile` 见上文调度台说明。冒烟测试会自动跳过调度台，不影响原有验证流程。
 
-原生瓦片的三角形查询加速结构在后台加载阶段预构建；
-未预构建模型采用每帧最多一个的兜底队列，检测和轨面贴合共享缓存，
-网格变更时失效、卸载后清理。缺少查询结构时保持暂停，不降低近景门槛。
-单个特别大的兜底模型仍可能超过帧预算。
+市区内操作：`Space` 暂停/继续，`R` 重置，`1/2/3/4/5` 切换跟踪/俯视/瞭望/驾驶室/轮对视角，`W` 切换线框，`T` 切换调度时刻表 HUD，`Ctrl+Shift+F/G` 切换小地图/信息面板。
 
-缓存位于 Godot 用户数据目录，不提交到仓库。
-
-Windows 推荐执行 `powershell -File .\run-preview.ps1`。启动器会将已经配置的系统代理传给插件的 libcurl 下载器，不修改系统代理设置。`-Terrain` 切回航拍地形模式，`-SmokeTest` 执行 30 秒无界面加载测试，`-GodotPath` 指定其他引擎路径，`-Cab` 可直接从驾驶室视角启动。直接调用 Godot 时也可在 `--` 后传入 `--cab-view`。直接从未继承代理环境的编辑器运行，Google 数据可能无法下载。
-
-- `Space`：暂停/继续
-- `R`：重新预览东京到品川
-- `C`：在轨道跟车视角与驾驶室司机视角之间切换；司机视角位于头车驾驶位高度，使用 64° 视野
-
-路线已改为真实轨道折线（170 个连通节点，约 6.7 km），不再连接两站中心走直线。轨道 © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright)，ODbL；离线快照及重建说明在 assets/route。该路线是可视化选线，不是行车调度数据。
-
-列车使用 E:/game_project/train/models 中的 train1.glb，并装配两个转向架、四组轮对；复制到 assets/train 后不再依赖外部工程。相机沿同一轨道在列车后方约 85 m、轨面上方约 65 m 跟随，随弯道转向。没有实测轨道高程，当前使用椭球高 46 m 基准及 ±8 m 近景表面贴合；站棚遮挡、摄影测量偏移仍可能需要校准，不是工程级贴轨精度。
-
-启动时对视野内 9 个位置进行带纹理三角形相交检测，只认可射线最前面的可见表面，不能用被粗模挡住的细瓦片充数。实景瓦片还必须具有 ≤8.1 m 的几何误差元数据；至少 7 个位置连续覆盖 5 秒、列车加载完成后才前进。运行中每秒复查，覆盖不足则停止等待。每前进 500 m 还会等待瓦片稳定。这是近景最低门槛，不代表最高精度 LOD，也不覆盖所有屏幕像素。
-
-当前插件在地理参考模式下按地理原点选择瓦片，因此脚本让地理原点跟随相机，局部相机位置保持为零。`forbid_holes` 用于等待子瓦片时保留父瓦片。原生插件的资源释放警告仍需单独诊断，不能视为已经修复。
-
-数据加载冒烟检查可通过 `run-preview.ps1 -Local -SmokeTest` 执行。
+项目使用 Godot 内置 3D、GLTF 与物理查询功能。运行不需要额外原生扩展。

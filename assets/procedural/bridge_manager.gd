@@ -178,27 +178,7 @@ func _find_ground(point: Vector3, up: Vector3, space_state) -> float:
 	var hit: Dictionary = space_state.intersect_ray(query)
 	if hit.has("position"):
 		return (hit["position"] as Vector3).dot(up)
-	# Fallback: Terrain3D（tianditu 模式）没有物理碰撞体，用 snap_point_to_terrain 采样
-	var terrain_h: Variant = _sample_terrain3d_height(point)
-	if terrain_h is Vector3:
-		return (terrain_h as Vector3).dot(up)
 	return point.dot(up) - virtual_ground_offset_m
-
-
-func _sample_terrain3d_height(point: Vector3) -> Variant:
-	var tree := get_tree()
-	if tree == null:
-		return null
-	var root := tree.root
-	if root == null:
-		return null
-	var bridge := root.find_child("CesiumBridge", true, false) as Node
-	if bridge == null or not bridge.has_method("snap_point_to_terrain"):
-		return null
-	var sampled: Variant = bridge.call("snap_point_to_terrain", point)
-	if sampled is Vector3:
-		return sampled as Vector3
-	return null
 
 
 # ══════════════════════════════════════════

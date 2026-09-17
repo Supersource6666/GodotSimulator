@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "route": {
+    "name": "大糸线",
+    "section": "信浓大町 → 白马",
+    "operator": "JR 东日本",
+    "distance_m": 0,
+    "max_speed_kmh": 95,
+    "directions": [
+      { "key": "down", "label": "下り 信浓大町 → 白马", "simulated": true }
+    ]
+  },
+  "services": [
+    { "key": "local", "name": "普通", "label": "普通列车", "speed_kmh": 72, "cars": 2 },
+    { "key": "rapid", "name": "快速", "label": "快速列车", "speed_kmh": 85, "cars": 2 },
+    { "key": "custom", "name": "回送", "label": "自定义", "speed_kmh": 60, "cars": 2 }
+  ],
+  "stations": []
+}

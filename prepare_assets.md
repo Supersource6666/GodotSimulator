@@ -108,6 +108,6 @@ powershell -ExecutionPolicy Bypass -File .\run-preview.ps1 -Local
 powershell -ExecutionPolicy Bypass -File .\run-preview.ps1 -Local -Loop
 ```
 
-本地预览运行阶段不需要网络、Cesium Token 或本地 Web 服务。
+本地预览运行阶段不需要网络或本地 Web 服务。
 
 > 注意：脚本文件位于项目根目录，正确路径是 `.\run-preview.ps1`，不是 `.\run-preview\.ps1`。

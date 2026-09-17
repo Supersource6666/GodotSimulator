@@ -1,0 +1,154 @@
+using System.Collections.Generic;
+using General;
+using SubwaySimulation.Utils;
+using UnityEngine;
+using UnityEngine.UI;
+using XCharts;
+
+public class WearData : MonoBehaviour
+{
+    private const int VAL_COUNT = 8;
+    [SerializeField] private Transform Wear; // 只作为一个父物体传入
+    [SerializeField] private int cacheMax = 2000;
+    [SerializeField] private int intervalCnt; // 间隔多少数据展示一个折线
+    [SerializeField] private int vihicleIndex = 1;
+    [SerializeField] private GameObject m_LineChartParent;
+
+    private int initCount = 0;
+
+    private LineChart m_LineChart;
+    private int m_SeriesCount;
+    private float m_TmpTimer;
+    private List<Toggle> m_Toggles = new List<Toggle>();
+    private int tmpCurCount;
+
+    private void Start()
+    {
+        ShowMW();
+        m_LineChart.xAxis0.type = Axis.AxisType.Category;
+        m_LineChart.xAxis0.splitNumber = 1;
+        m_LineChart.xAxis0.axisName.show = true;
+        m_LineChart.xAxis0.axisName.name = "时间(s)";
+        m_LineChart.xAxis0.axisName.textStyle.offset = new Vector2(0, 14f);
+        m_LineChart.xAxis0.axisName.location = AxisName.Location.Middle;
+        foreach (var series in m_LineChart.series.list)
+        {
+            series.symbol.type = SerieSymbolType.Circle;
+            series.lineStyle.width = 2f;
+        }
+    }
+
+    private void FixedUpdate()
+    {
+        if (m_LineChartParent.activeInHierarchy && m_SeriesCount == 0)
+        {
+            m_LineChartParent.SetActive(false);
+        }
+
+        if (Globle.IsStart && tmpCurCount != Globle.CurCount && !Globle.isSimpackMode)
+        {
+            initCount++;
+            if (initCount == intervalCnt)
+            {
+                AddOneData();
+                initCount = 0;
+            }
+
+            tmpCurCount = Globle.CurCount;
+        }
+
+        // 如果isstart = false，刷新图表
+        if (!Globle.IsStart & m_LineChart.series.GetSerie(0).dataCount != 0)
+        {
+            m_LineChart.ClearData();
+            tmpCurCount = 0;
+            m_TmpTimer = 0;
+        }
+    }
+
+    public void ShowMW()
+    {
+        if (m_LineChart & Wear & m_Toggles.Count == VAL_COUNT) return;
+        m_LineChart = Utility.FindChildRecursively(transform, "LineChartBody").GetComponent<LineChart>();
+        m_LineChart.ClearData();
+        m_LineChart.SetMaxCache(cacheMax);
+        // WheelRate = GameObject.Find("WheelRate").transform;
+        for (int i = 1; i <= VAL_COUNT; i++)
+        {
+            Transform tmp;
+            if (i < 5)
+            {
+                tmp = Utility.FindChildRecursively(Wear, $"TogL{i}");
+                m_Toggles.Add(tmp.GetComponent<Toggle>());
+            }
+            else
+            {
+                tmp = Utility.FindChildRecursively(Wear, $"TogR{i - 4}");
+                m_Toggles.Add(tmp.GetComponent<Toggle>());
+            }
+        }
+
+        for (var i = 0; i < VAL_COUNT; i++)
+        {
+            m_LineChart.series.GetSerie(i).show = false;
+        }
+    }
+
+    void AddOneData()
+    {
+        float xvalue = Globle.Normal[vihicleIndex - 1][Globle.CurCount].time;
+        if (xvalue >= m_TmpTimer)
+            m_TmpTimer = xvalue;
+        else return;
+        
+        // 控制x轴splitNumber
+        AdjustXSplitNumber(xvalue);
+        
+        float[] yvalue = new float[VAL_COUNT];
+        for (var i = 0; i < VAL_COUNT; i++)
+        {
+            yvalue[i] = Globle.PostSolution[vihicleIndex - 1][Globle.CurCount].WearNum[i];
+
+            m_LineChart.yAxis0.max = m_LineChart.series.list[i].max>0?
+                m_LineChart.series.list[i].max*1.3f:
+                m_LineChart.series.list[i].max*0.7f;
+            m_LineChart.yAxis0.min = m_LineChart.series.list[i].min<0?
+                m_LineChart.series.list[i].min*1.3f:
+                m_LineChart.series.list[i].min*0.7f;
+            
+            if (yvalue[i] > 40)
+            {
+                continue;
+            }
+
+            m_LineChart.AddData(i, xvalue, yvalue[i]);
+        }
+
+        // m_LineChart.AddXAxisData(xvalue.ToString("F5"));
+    }
+
+    // 传入一个index，根据对应index的toggle的is on来执行series是否可视
+    public void SwitchSeries(int index)
+    {
+        if (m_Toggles[index].isOn)
+        {
+            if (!m_LineChartParent.activeInHierarchy)
+            {
+                m_LineChartParent.SetActive(true);
+            }
+
+            m_LineChart.series.GetSerie(index).show = true;
+            m_SeriesCount++;
+        }
+        else
+        {
+            m_LineChart.series.GetSerie(index).show = false;
+            m_SeriesCount--;
+        }
+    }
+    
+    private void AdjustXSplitNumber(float xValue)
+    {
+        m_LineChart.xAxis0.splitNumber = (int) (xValue + 1f);
+    }
+}

@@ -1,55 +1,46 @@
 ﻿param(
     [string]$GodotPath = 'E:\Godot_v4.7\Godot_v4.7-stable_win64_console.exe',
     [switch]$SmokeTest,
-    [switch]$Terrain,
+    # Accepted for compatibility; all previews now use local scene modules.
     [switch]$Local,
-    [ValidateSet('City', 'Countryside', '市区内', '郊外')]
     [string]$LocalScene,
     [string]$ExternalProject = 'E:\game_project',
     [switch]$Loop,
-    [switch]$Cab
+    [switch]$Cab,
+    # 调度台相关参数。
+    [switch]$SkipDispatch,
+    [string]$PlanFile,
+    [string]$TrainNumber,
+    [string]$Departure,
+    [switch]$DispatchTest
 )
 
 $ErrorActionPreference = 'Stop'
-if ($LocalScene -and -not $Local) { throw '-LocalScene requires -Local.' }
 if (-not (Test-Path -LiteralPath $GodotPath -PathType Leaf)) {
     throw 'Godot executable not found. Supply -GodotPath.'
 }
-# libcurl does not inherit Windows Internet Options. Forward the existing
-# proxy only to this launch and restore the calling process environment.
-$previewOldHttp = $env:HTTP_PROXY
-$previewOldHttps = $env:HTTPS_PROXY
-try {
-    $previewTarget = [uri]'https://tile.googleapis.com/'
-    $previewProxy = [Net.WebRequest]::DefaultWebProxy.GetProxy($previewTarget)
-    if (-not $Local -and -not $env:HTTPS_PROXY -and $previewProxy -and $previewProxy.Authority -ne $previewTarget.Authority) {
-        $env:HTTPS_PROXY = $previewProxy.AbsoluteUri
-        if (-not $env:HTTP_PROXY) { $env:HTTP_PROXY = $previewProxy.AbsoluteUri }
-        Write-Host 'Using the configured Windows proxy for Cesium downloads.'
-    }
-    $previewArgs = @('--path', $PSScriptRoot)
-    if ($Local) { $previewArgs += 'res://local.tscn' }
-    if ($SmokeTest) { $previewArgs += '--headless' }
-    $previewArgs += '--'
-    if ($Local) {
-        $previewArgs += '--external-project=' + $ExternalProject.Replace('\', '/')
-        if ($LocalScene) {
-            $sceneKey = if ($LocalScene -in @('City', '市区内')) { 'city' } else { 'countryside' }
-            $previewArgs += '--local-scene=' + $sceneKey
-        }
-    }
-    if ($SmokeTest) { $previewArgs += '--demo-smoke-test' }
-    if ($Terrain) { $previewArgs += '--terrain-preview' }
-    if ($Loop) { $previewArgs += '--offline-loop' }
-    if ($Cab) { $previewArgs += '--cab-view' }
-    # Native plugin errors may contain signed URLs. Redact query strings.
-    $ErrorActionPreference = 'Continue'
-    & $GodotPath @previewArgs 2>&1 | ForEach-Object {
-        $_.ToString() -replace '(?i)((?:https?://|/v1/)[^\s?]+)\?[^\s]+', '$1?[redacted]'
-    }
-    $previewExit = $LASTEXITCODE
-} finally {
-    $env:HTTP_PROXY = $previewOldHttp
-    $env:HTTPS_PROXY = $previewOldHttps
+
+# 调度台冒烟测试：直接运行调度台入口，验证方案与时刻表生成。
+$mainScene = 'res://app/local.tscn'
+if ($DispatchTest) {
+    $mainScene = 'res://app/dispatch/dispatch_console.tscn'
 }
-exit $previewExit
+
+$previewArgs = @('--path', $PSScriptRoot, $mainScene)
+if ($SmokeTest -or $DispatchTest) { $previewArgs += '--headless' }
+$previewArgs += '--'
+$previewArgs += '--external-project=' + $ExternalProject.Replace('\', '/')
+if ($LocalScene) {
+    $previewArgs += '--local-scene=' + $LocalScene
+}
+if ($SmokeTest) { $previewArgs += '--demo-smoke-test' }
+if ($DispatchTest) { $previewArgs += '--dispatch-smoke-test' }
+if ($SkipDispatch) { $previewArgs += '--skip-dispatch' }
+if ($PlanFile) { $previewArgs += '--dispatch-plan-file=' + $PlanFile }
+if ($TrainNumber) { $previewArgs += '--train-number=' + $TrainNumber }
+if ($Departure) { $previewArgs += '--departure=' + $Departure }
+if ($Loop) { $previewArgs += '--offline-loop' }
+if ($Cab) { $previewArgs += '--cab-view' }
+
+& $GodotPath @previewArgs
+exit $LASTEXITCODE
