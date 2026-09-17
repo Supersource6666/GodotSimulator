@@ -1,8 +1,9 @@
 extends Node3D
-## Photo-inspired cutting with the same external rolling stock as outdoors.
+## Photo-inspired cutting with project-local rolling stock.
 const Batch := preload("res://assets/procedural/detail_batch.gd")
 const Track := preload("res://scenes/travel/outdoors_track.gd")
-const Bridge := preload("res://scenes/outdoors/external_resources.gd")
+const TRAIN_SCENE_PATH := "res://scenes/travel/train/train_car.tscn"
+const MIDDLE_MODEL_PATH := "res://scenes/travel/train/models/train2.glb"
 const Landscape := preload("res://scenes/travel/landscape.gd")
 const DerailChart := preload("res://scenes/travel/derail_chart.gd")
 const WheelRateChart := preload("res://scenes/travel/wheel_rate_chart.gd")
@@ -12,7 +13,7 @@ const WheelsetDisplacementChart := preload("res://scenes/travel/wheelset_displac
 const AttackAngleChart := preload("res://scenes/travel/attack_angle_chart.gd")
 const LENGTH := 1000.0
 const START := 45.0
-const RAIL_TOP := 0.54
+const RAIL_TOP := 0.46
 const TRAIN_HEAD_START_Z := -42.0
 const TRAIN_HEAD_END_Z := -850.0
 # 轮对（wheelset0720.glb）统一材质色：模型自带 5 种彩色材质，此处统一为单一颜色。
@@ -80,7 +81,6 @@ void light() {
 	DIFFUSE_LIGHT += ATTENUATION * LIGHT_COLOR * ALBEDO * ndotl;
 }
 """
-var bridge: ResourceFormatLoader
 var train: Node3D
 var camera: Camera3D
 var arch_count := 0
@@ -161,7 +161,7 @@ func _ready() -> void:
 	attack_angle_chart.hide()
 	_build_chart_selectors(layer)
 	if not train_ok:
-		help.text = "列车资源加载失败，请检查 E:/game_project 或 --external-project 参数。"
+		help.text = "列车资源加载失败，请检查 scenes/travel/train/train_car.tscn。"
 		help.show()
 	if "--demo-smoke-test" in OS.get_cmdline_user_args():
 		var ok := train_ok and tracks.size() == 2 and arch_count > 500
@@ -467,7 +467,7 @@ func _corridor() -> void:
 		track.name = "LeftTrack" if side < 0 else "RightTrack"
 		track.ballast_width_m = 3.4
 		track.ballast_height_m = 0.16
-		track.sleeper_height_m = 0.22
+		track.sleeper_height_m = 0.14
 		track.rail_height_m = 0.16
 		track.rail_head_width_m = 0.07
 		# 1.435 m between inner rail-head faces, 1.505 m between centres.
@@ -537,22 +537,20 @@ func _vegetation() -> void:
 	Landscape.build(self, START, LENGTH)
 
 func _train() -> void:
-	var external := "E:/game_project"
-	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--external-project="):
-			external = arg.trim_prefix("--external-project=").replace("\\", "/").trim_suffix("/")
-	bridge = Bridge.new()
-	bridge.project_root = external
-	ResourceLoader.add_resource_format_loader(bridge, true)
-	if not FileAccess.file_exists(external.path_join("train/scenes/train_car.tscn")):
-		push_error("Travel: outdoors train assets missing at " + external)
+	if not ResourceLoader.exists(TRAIN_SCENE_PATH):
+		push_error("Travel: local train scene missing: " + TRAIN_SCENE_PATH)
 		return
-	var packed := load("res://train/scenes/train_car.tscn") as PackedScene
-	var middle := load("res://train/models/train2.glb") as PackedScene
-	if packed == null or middle == null:
+	var packed := load(TRAIN_SCENE_PATH) as PackedScene
+	if packed == null:
 		return
+	# Use the dedicated middle-car body when available; otherwise retain train1.
+	var middle: PackedScene = null
+	if ResourceLoader.exists(MIDDLE_MODEL_PATH):
+		middle = load(MIDDLE_MODEL_PATH) as PackedScene
+		if middle == null:
+			return
 	train = Node3D.new()
-	train.name = "OutdoorsTrain"
+	train.name = "TravelTrain"
 	add_child(train)
 	var spacing := 26.5
 	for i in range(4):
@@ -560,8 +558,7 @@ func _train() -> void:
 		car.name = "Car_%d" % (i + 1)
 		train.add_child(car)
 		var model := packed.instantiate() as Node3D
-		model.set_script(null)
-		if i in [1, 2]:
+		if i in [1, 2] and middle != null:
 			var mount := model.get_node("ModelMount")
 			mount.get_node("Model").free()
 			var body := middle.instantiate()
@@ -596,7 +593,7 @@ func _train() -> void:
 		_add_wheelset_lights(car, model)
 	for i in range(3):
 		_box(train, "Gangway_%d" % i, Vector3(-2.3, RAIL_TOP + 2.05, -42 - i * spacing - spacing * 0.5), Vector3(2.65, 2.75, 0.7), _mat("14181b"))
-	train_ok = bridge.failures.is_empty() and train.get_child_count() == 7
+	train_ok = train.get_child_count() == 7
 
 func _restore_appearance(node: Node) -> void:
 	# Same surface roles and opaque livery as outdoors' preview.
@@ -804,8 +801,3 @@ func _capture() -> void:
 	var detail_error := get_viewport().get_texture().get_image().save_png("res://scenes/travel/track_detail.png")
 	print("TRAVEL_DETAIL_CAPTURE ", error_string(detail_error))
 	get_tree().quit(0 if error == OK and detail_error == OK and train_ok else 1)
-
-func _exit_tree() -> void:
-	if bridge != null:
-		ResourceLoader.remove_resource_format_loader(bridge)
-		bridge.clear_scene_uids()

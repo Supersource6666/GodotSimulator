@@ -16,10 +16,10 @@
 - F1：显示/隐藏操作说明
 - Esc：返回场景菜单
 
-列车通过 outdoors 的 external_resources.gd 加载 E:/game_project/train/scenes/train_car.tscn 和 train2.glb；沿用四节编组、27 m 车长、27.3 m 车心间距、尾车反向和三处风挡。包含原场景的转向架与轮对。轮底按模型包围盒对齐轨顶，列车静置不自动行驶。
+列车直接加载项目内 scenes/travel/train/train_car.tscn，模型位于同目录 models 文件夹。保留四节编组、27 m 车长、26.5 m 车心间距、尾车反向和三处风挡，以及转向架与轮对。首尾车体使用 train1.glb，中间两节使用 models/train2.glb；若未提供 train2.glb，则回退到 train1.glb。轮底按模型包围盒对齐轨顶。
 
-外部资源不复制，移动外部项目后使用 -ExternalProject 指定新目录。缺失时显示错误，冒烟测试失败。场景其余内容为本地程序化几何。
+travel 不再依赖 E:/game_project 或 -ExternalProject。train_car.tscn 使用本地模型路径，未挂载原始 scripts/train_car.gd：该控制器依赖原项目的 TrackManager，而 travel 由自身进度控制列车位置。原始脚本作为参考保留。首次运行前请在 Godot 编辑器中完成本地 GLB 导入；资源缺失时显示错误，冒烟测试失败。
 
-承轨台与扣件采用 outdoors 的结构和材质，在 outdoors_track.gd 中本地复用：承轨台 0.45 × 0.22 × 0.32 m，纵向间距 0.65 m；每套扣件含轨下垫板、挡肩、绝缘块、垫圈、六角螺母和弯曲弹条。钢轨同步采用 0.16 m 高截面，轨顶为 0.54 m，列车轮底同步调整。轨头内侧间距 1.435 m，中心距 1.505 m。
+承轨台和扣件在 outdoors_track.gd 中按照片轮廓生成：台座采用低矮坡面、薄底沿和倒角，底面 0.64 × 0.38 m，混凝土高 0.126 m，顶部承载面 0.414 × 0.29 m，纵向间距 0.65 m。尺寸为外观近似，并非照片测量值。每套扣件含 14 mm 橡胶垫板、两侧挡肩、深灰绝缘块、垫圈、六角螺母、螺栓端部和连续圆弧弹条。轨底位于板面以上 0.14 m；钢轨高 0.16 m，轨顶为 0.46 m，列车轮底同步对齐。轨头内侧间距 1.435 m，中心距 1.505 m。台座与扣件使用共享网格、分块 MultiMesh 和距离裁剪。
 
 直接运行时附加用户参数 --travel-capture 会生成 preview.png 和 track_detail.png 并退出。

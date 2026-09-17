@@ -1,0 +1,56 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/travel/train/models/train1.glb" id="2_train1"]
+[ext_resource type="PackedScene" path="res://scenes/travel/train/models/bogie0720.glb" id="3_bogie"]
+[ext_resource type="PackedScene" path="res://scenes/travel/train/models/wheelset0720.glb" id="4_wheelset"]
+
+[node name="TrainCar" type="Node3D" unique_id=358042500]
+
+[node name="ModelMount" type="Marker3D" parent="." unique_id=2045913941]
+
+[node name="Model" parent="ModelMount" unique_id=1784369846 instance=ExtResource("2_train1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.007254839, 0, -0.011656284)
+
+[node name="RunningGear" type="Node3D" parent="." unique_id=618395541]
+
+[node name="FrontBogieVisual" type="Node3D" parent="RunningGear" unique_id=1571500827]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.37, -7.314618)
+
+[node name="BogieModel" parent="RunningGear/FrontBogieVisual" unique_id=1366055217 instance=ExtResource("3_bogie")]
+transform = Transform3D(-3.6199901e-06, 0, 1, 0, 1, 0, -1, 0, -3.6199901e-06, 0, 0, 0)
+
+[node name="FrontWheelset" type="Node3D" parent="RunningGear/FrontBogieVisual" unique_id=572304844]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.46, -1.25)
+
+[node name="WheelsetModel" parent="RunningGear/FrontBogieVisual/FrontWheelset" unique_id=1404268572 instance=ExtResource("4_wheelset")]
+transform = Transform3D(-3.6199901e-06, 0, 1, 0, 1, 0, -1, 0, -3.6199901e-06, 0, 0, 0)
+
+[node name="RearWheelset" type="Node3D" parent="RunningGear/FrontBogieVisual" unique_id=807343662]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.46, 1.25)
+
+[node name="WheelsetModel" parent="RunningGear/FrontBogieVisual/RearWheelset" unique_id=1296262060 instance=ExtResource("4_wheelset")]
+transform = Transform3D(-3.6199901e-06, 0, 1, 0, 1, 0, -1, 0, -3.6199901e-06, 0, 0, 0)
+
+[node name="RearBogieVisual" type="Node3D" parent="RunningGear" unique_id=1231822606]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.37, 9.610688)
+
+[node name="BogieModel" parent="RunningGear/RearBogieVisual" unique_id=52302112 instance=ExtResource("3_bogie")]
+transform = Transform3D(-3.6199901e-06, 0, 1, 0, 1, 0, -1, 0, -3.6199901e-06, 0, 0, 0)
+
+[node name="FrontWheelset" type="Node3D" parent="RunningGear/RearBogieVisual" unique_id=692567078]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.46, -1.25)
+
+[node name="WheelsetModel" parent="RunningGear/RearBogieVisual/FrontWheelset" unique_id=318305460 instance=ExtResource("4_wheelset")]
+transform = Transform3D(-3.6199901e-06, 0, 1, 0, 1, 0, -1, 0, -3.6199901e-06, 0, 0, 0)
+
+[node name="RearWheelset" type="Node3D" parent="RunningGear/RearBogieVisual" unique_id=236028057]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.46, 1.25)
+
+[node name="WheelsetModel" parent="RunningGear/RearBogieVisual/RearWheelset" unique_id=1501974677 instance=ExtResource("4_wheelset")]
+transform = Transform3D(-3.6199901e-06, 0, 1, 0, 1, 0, -1, 0, -3.6199901e-06, 0, 0, 0)
+
+[node name="FrontBogie" type="Marker3D" parent="." unique_id=1497383406]
+visible = false
+
+[node name="RearBogie" type="Marker3D" parent="." unique_id=381870646]
+visible = false
