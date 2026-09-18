@@ -11,6 +11,10 @@ const ChartToggle := preload("res://scenes/travel/chart_toggle.gd")
 const LateralForceChart := preload("res://scenes/travel/lateral_force_chart.gd")
 const WheelsetDisplacementChart := preload("res://scenes/travel/wheelset_displacement_chart.gd")
 const AttackAngleChart := preload("res://scenes/travel/attack_angle_chart.gd")
+const OverheadLine = preload("res://scenes/travel/overhead_line.gd")
+const Pantograph = preload("res://scenes/travel/pantograph.gd")
+var overhead_lines: Array[Node3D] = []
+var pantograph: Node3D
 const LENGTH := 1000.0
 const START := 45.0
 const RAIL_TOP := 0.46
@@ -119,6 +123,7 @@ func _ready() -> void:
 	_corridor()
 	_slopes()
 	_vegetation()
+	_electrification()
 	_train()
 	camera = Camera3D.new()
 	camera.name = "ReferenceCamera"
@@ -131,7 +136,7 @@ func _ready() -> void:
 	add_child(layer)
 	help = Label.new()
 	help.position = Vector2(24, 22)
-	help.text = "TRAVEL  路堑铁路\n1 参考视角   2 列车近景   Ctrl+Shift+W 轮轨相机   D 脱轨系数   W 轮重减载率   F1 说明   Esc 返回"
+	help.text = "TRAVEL  路堑铁路\n1 参考视角   2 列车近景   3 弓网近景   P 升降弓   Ctrl+Shift+W 轮轨相机   D 脱轨系数   W 轮重减载率   F1 说明   Esc 返回"
 	help.add_theme_color_override("font_outline_color", Color.BLACK)
 	help.add_theme_constant_override("outline_size", 5)
 	layer.add_child(help)
@@ -174,8 +179,11 @@ func _ready() -> void:
 			ok = ok and track.mesh != null and track.sleeper_instance_count > 2000
 			ok = ok and track.fastener_instance_count == track.sleeper_instance_count
 			ok = ok and is_equal_approx(track.ballast_height_m + track.sleeper_height_m + track.rail_height_m, RAIL_TOP)
+		ok = _check_electrification() and ok
 		print("TRAVEL_SMOKE ", "PASS" if ok else "FAIL", " arches=", arch_count, " train=", train_ok)
 		get_tree().quit(0 if ok else 1)
+	if "--pantograph-capture" in OS.get_cmdline_user_args():
+		_capture_pantograph.call_deferred()
 	if "--travel-capture" in OS.get_cmdline_user_args():
 		_capture.call_deferred()
 
@@ -426,7 +434,8 @@ func _environment() -> void:
 	env.adjustment_contrast = 1.12
 	env.adjustment_saturation = 1.08
 	# Contact shadows sell the scale of the seats, rails and arch ribs.
-	env.ssao_enabled = true
+	# Legacy R5 M330 Vulkan SSAO produces black tiles; keep other GPUs unchanged.
+	env.ssao_enabled = not RenderingServer.get_video_adapter_name().to_lower().contains("r5 m330")
 	env.ssao_radius = 1.2
 	env.ssao_intensity = 2.2
 	env.ssao_power = 1.6
@@ -591,6 +600,7 @@ func _train() -> void:
 		car.rotation.y = PI
 		car.position = Vector3(-2.3, RAIL_TOP, -42 - i * spacing)
 		_add_wheelset_lights(car, model)
+		if i==1: _attach_pantograph(car,bounds.size.y*factor)
 	for i in range(3):
 		_box(train, "Gangway_%d" % i, Vector3(-2.3, RAIL_TOP + 2.05, -42 - i * spacing - spacing * 0.5), Vector3(2.65, 2.75, 0.7), _mat("14181b"))
 	train_ok = train.get_child_count() == 7
@@ -767,6 +777,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	match event.keycode:
 		KEY_1: _reference_view()
 		KEY_2: _set_view_world(Vector3(6, 4.8, -19), Vector3(-2.3, 1.8, -48))
+		KEY_3: _pantograph_view()
+		KEY_P:
+			if pantograph!=null: pantograph.set_raised(not pantograph.raised)
 		KEY_D:
 			if derail_chart != null:
 				derail_chart.visible = not derail_chart.visible
@@ -801,3 +814,72 @@ func _capture() -> void:
 	var detail_error := get_viewport().get_texture().get_image().save_png("res://scenes/travel/track_detail.png")
 	print("TRAVEL_DETAIL_CAPTURE ", error_string(detail_error))
 	get_tree().quit(0 if error == OK and detail_error == OK and train_ok else 1)
+
+func _line_pose(distance: float, _lateral: float, side: float) -> Dictionary:
+	return {"point":Vector3(side*2.3,RAIL_TOP,START-distance),"right":Vector3(side,0,0),"up":Vector3.UP,"forward":Vector3.FORWARD}
+
+func _electrification() -> void:
+	var root := Node3D.new()
+	root.name = "TravelCatenary"
+	add_child(root)
+	for side in [-1.0,1.0]:
+		var line := OverheadLine.new()
+		line.name = "LeftContactSystem" if side<0 else "RightContactSystem"
+		root.add_child(line)
+		line.build(LENGTH,_line_pose.bind(side))
+		overhead_lines.append(line)
+		for d in range(0,int(LENGTH)+1,50):
+			_box(root,"MastFoundation",Vector3(side*6.95,0.15,START-d),Vector3(0.45,0.30,0.70),_mat("91958d"))
+		# Raised cable terminals and the catenary stay outside the service path.
+		for d in range(0,int(LENGTH)+1,50):
+			var z := START-d
+			_box(root,"MastBasePlate",Vector3(side*6.95,0.32,z),Vector3(0.40,0.035,0.48),_mat("50585b"))
+
+func _attach_pantograph(car: Node3D, roof_height: float) -> void:
+	pantograph = Pantograph.new()
+	pantograph.name = "RoofPantograph"
+	car.add_child(pantograph)
+	pantograph.position = Vector3(0,roof_height+0.025,-4.0)
+	# Wire cylinders have 18 mm visual radius; carbon touches their underside.
+	var contact_y := RAIL_TOP+OverheadLine.WIRE_HEIGHT_M-0.018
+	pantograph.configure(contact_y-pantograph.global_position.y)
+
+func _pantograph_view() -> void:
+	if pantograph==null: return
+	var target := pantograph.global_position+Vector3(0,pantograph.raised_height*0.6,0)
+	_set_view_world(target+Vector3(4.5,1.8,5.0),target)
+
+func _check_electrification() -> bool:
+	if overhead_lines.size()!=2 or pantograph==null: return false
+	var ok := true
+	for line in overhead_lines:
+		ok = ok and line.mast_count==21 and line.wire_segment_count==300
+	var original := train_progress
+	for progress in [0.0,0.25,0.5,0.75,1.0]:
+		_set_train_progress(progress)
+		var p := pantograph.global_position
+		var wire: Vector3 = overhead_lines[0]._wire_point(START-p.z,_line_pose.bind(-1.0),false)
+		ok = ok and absf(wire.x-p.x)<0.725
+		ok = ok and absf(wire.y-0.018-(p.y+pantograph.carbon_top))<0.001
+		ok = ok and p.z>=START-LENGTH and p.z<=START
+	_set_train_progress(original)
+	pantograph.set_raised(false,true)
+	ok = ok and pantograph.current_height < pantograph.raised_height-0.3
+	for arm in pantograph.arm_nodes:
+		ok = ok and arm.position.y>=0.20 and arm.position.y<0.41
+	pantograph.set_raised(true)
+	pantograph._process(0.1)
+	ok = ok and pantograph.current_height>0.40 and pantograph.current_height<pantograph.raised_height
+	pantograph.set_raised(true,true)
+	print("TRAVEL_BOW_NET ", "PASS" if ok else "FAIL"," masts=42 pantographs=1 height=",pantograph.raised_height)
+	return ok
+
+func _capture_pantograph() -> void:
+	_pantograph_view()
+	for child in get_children():
+		if child is CanvasLayer: child.visible = false
+	for i in range(16): await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var error := get_viewport().get_texture().get_image().save_png("res://scenes/travel/pantograph_detail.png")
+	print("TRAVEL_PANTOGRAPH_CAPTURE ",error_string(error))
+	get_tree().quit(0 if error==OK else 1)

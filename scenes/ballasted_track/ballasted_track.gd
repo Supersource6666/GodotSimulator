@@ -190,10 +190,11 @@ func _verges() -> void:
 	vegetation.build(LENGTH)
 
 func _build_camera_reset() -> void:
-	_camera.position = Vector3(-0.4,1.55,13.7)
-	_camera.rotation_degrees = Vector3(-13,-7,0)
+	# Match travel/track_detail: centered, 0.84 m above rail, 53 degree FOV.
+	_camera.position = Vector3(0.0,1.53,13.7)
+	_camera.look_at(Vector3(0.0,0.63,-326.3),Vector3.UP)
 	_camera.near = 0.035
-	_camera.fov = 69
+	_camera.fov = 53
 
 func _process(delta: float) -> void:
 	var direction := Vector3(float(Input.is_physical_key_pressed(KEY_D))-float(Input.is_physical_key_pressed(KEY_A)),float(Input.is_physical_key_pressed(KEY_E))-float(Input.is_physical_key_pressed(KEY_Q)),float(Input.is_physical_key_pressed(KEY_S))-float(Input.is_physical_key_pressed(KEY_W)))
