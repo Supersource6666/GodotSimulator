@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://ndlt0k27pffj"
+
+[deps]
+
+files=["res://offline_data/dynamic_data/wheel_dis.0.translation", "res://offline_data/dynamic_data/wheel_dis.0.translation", "res://offline_data/dynamic_data/wheel_dis.0.translation", "res://offline_data/dynamic_data/wheel_dis.0.translation"]
+
+source_file="res://offline_data/dynamic_data/wheel_dis.csv"
+dest_files=["res://offline_data/dynamic_data/wheel_dis.0.translation", "res://offline_data/dynamic_data/wheel_dis.0.translation", "res://offline_data/dynamic_data/wheel_dis.0.translation", "res://offline_data/dynamic_data/wheel_dis.0.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

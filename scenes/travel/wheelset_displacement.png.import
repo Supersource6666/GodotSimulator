@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bttn4o0q74605"
-path="res://.godot/imported/屏幕截图 2026-09-07 095219.png-ebf915c74dd0fffd5ad6c71e9183feb2.ctex"
+uid="uid://btb4v0by40g1i"
+path="res://.godot/imported/wheelset_displacement.png-b7ad1c5234d1db82d08929b9f3289386.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/figs/屏幕截图 2026-09-07 095219.png"
-dest_files=["res://.godot/imported/屏幕截图 2026-09-07 095219.png-ebf915c74dd0fffd5ad6c71e9183feb2.ctex"]
+source_file="res://scenes/travel/wheelset_displacement.png"
+dest_files=["res://.godot/imported/wheelset_displacement.png-b7ad1c5234d1db82d08929b9f3289386.ctex"]
 
 [params]
 

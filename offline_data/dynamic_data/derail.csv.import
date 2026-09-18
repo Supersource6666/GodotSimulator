@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://xv5ufyfeagee"
+
+[deps]
+
+files=["res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation"]
+
+source_file="res://offline_data/dynamic_data/derail.csv"
+dest_files=["res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation", "res://offline_data/dynamic_data/derail.0.00721359.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

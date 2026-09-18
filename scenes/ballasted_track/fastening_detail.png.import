@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bttn4o0q74605"
-path="res://.godot/imported/屏幕截图 2026-09-07 095219.png-ebf915c74dd0fffd5ad6c71e9183feb2.ctex"
+uid="uid://dtcbkxatrqyrt"
+path="res://.godot/imported/fastening_detail.png-c353530a4a9f87828dc19c58c17a040a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://docs/figs/屏幕截图 2026-09-07 095219.png"
-dest_files=["res://.godot/imported/屏幕截图 2026-09-07 095219.png-ebf915c74dd0fffd5ad6c71e9183feb2.ctex"]
+source_file="res://scenes/ballasted_track/fastening_detail.png"
+dest_files=["res://.godot/imported/fastening_detail.png-c353530a4a9f87828dc19c58c17a040a.ctex"]
 
 [params]
 
