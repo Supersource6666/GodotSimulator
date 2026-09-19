@@ -1,6 +1,7 @@
 extends "res://assets/procedural/track_generator.gd"
 ## Photo reference: low bevelled concrete seats and paired curved spring clips.
 ## Seat origin is slab top; sleeper_height_m includes the 14 mm rubber pad.
+const SEAT_HALF_LENGTH_M := 0.19
 var fastener_instance_count := 0
 
 func _build_instanced_sleepers(samples: Array[Dictionary], _material: Material) -> void:
@@ -11,14 +12,18 @@ func _build_instanced_sleepers(samples: Array[Dictionary], _material: Material) 
 	concrete.albedo_color = Color(0.55, 0.56, 0.55)
 	concrete.roughness = 0.9
 	var seats: Array[Transform3D] = []
-	var distance := 0.0
-	while distance < float(samples[-1].distance):
+	# Half-pitch offset puts each 6.5 m slab joint between rows (10 rows/slab).
+	# Use integer row indices to avoid accumulated spacing drift over long tracks.
+	var first_distance := sleeper_spacing_m * 0.5
+	var last_distance := float(samples[-1].distance) - SEAT_HALF_LENGTH_M
+	var row_count := maxi(0, int(floor((last_distance - first_distance) / sleeper_spacing_m)) + 1)
+	for row in range(row_count):
+		var distance := first_distance + row * sleeper_spacing_m
 		var sample := _interpolate_sample(samples, distance)
 		var frame := Basis(sample.right, sample.up, -sample.forward)
 		for side: float in [-1.0, 1.0]:
 			var center: Vector3 = sample.point + sample.up * (ground_clearance_m + ballast_height_m) + sample.right * (side * rail_gauge_m * 0.5)
 			seats.append(Transform3D(frame, center))
-		distance += sleeper_spacing_m
 	sleeper_instance_count = seats.size()
 	fastener_instance_count = seats.size()
 	_add_track_batch(_sleeper_root, "RailSeats", seats, concrete, _rail_seat_mesh())
@@ -46,55 +51,53 @@ func _build_fasteners(root: Node3D, seats: Array[Transform3D]) -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var dark := Color(0.065, 0.075, 0.08)
-	var spring := Color(0.18, 0.19, 0.17)
-	var bolt := Color(0.33, 0.34, 0.30)
-	var insulation := Color(0.22, 0.23, 0.20)
+	var spring := Color(0.38, 0.40, 0.41)
+	var bolt := Color(0.43, 0.45, 0.46)
+	var insulation := Color(0.18, 0.19, 0.18)
 	var pad := BoxMesh.new()
 	pad.size = Vector3(0.19, 0.014, 0.28)
 	_fastener_part(st, pad, Transform3D(Basis.IDENTITY, Vector3(0, -0.007, 0)), dark)
 	for side: float in [-1.0, 1.0]:
+		# Outer edge x=0.200, ends z=+/-0.120: inside the bevelled seat top.
+		var plate := BoxMesh.new()
+		plate.size = Vector3(0.115, 0.008, 0.24)
+		_fastener_part(st, plate, Transform3D(Basis.IDENTITY, Vector3(side * 0.1425, -0.010, 0)), bolt)
+		var edge := BoxMesh.new()
+		edge.size = Vector3(0.012, 0.024, 0.24)
+		_fastener_part(st, edge, Transform3D(Basis.IDENTITY, Vector3(side * 0.194, -0.002, 0)), dark)
 		var shoulder := BoxMesh.new()
-		shoulder.size = Vector3(0.09, 0.045, 0.19)
-		_fastener_part(st, shoulder, Transform3D(Basis.IDENTITY, Vector3(side * 0.145, 0.0085, 0)), dark)
+		shoulder.size = Vector3(0.102, 0.03, 0.19)
+		_fastener_part(st, shoulder, Transform3D(Basis.IDENTITY, Vector3(side * 0.143, 0.009, 0)), bolt)
 		var block := BoxMesh.new()
-		block.size = Vector3(0.032, 0.014, 0.15)
+		block.size = Vector3(0.032, 0.014, 0.18)
 		_fastener_part(st, block, Transform3D(Basis.IDENTITY, Vector3(side * 0.079, 0.031, 0)), insulation)
-		var washer := CylinderMesh.new()
-		washer.top_radius = 0.024
-		washer.bottom_radius = 0.024
-		washer.height = 0.008
-		washer.radial_segments = 12
-		washer.rings = 1
-		_fastener_part(st, washer, Transform3D(Basis.IDENTITY, Vector3(side * 0.153, 0.043, 0)), bolt)
-		var nut := CylinderMesh.new()
-		nut.top_radius = 0.017
-		nut.bottom_radius = 0.017
-		nut.height = 0.024
-		nut.radial_segments = 6
-		nut.rings = 1
-		_fastener_part(st, nut, Transform3D(Basis.IDENTITY, Vector3(side * 0.153, 0.059, 0)), bolt)
-		# Bent spring-steel clip: two toes bear on the insulated rail foot.
+		# Double-return spring clip: toes on the rail foot, low outer loops,
+		# and a raised centre held DOWN by the washer (not a loop above the nut).
 		var points := PackedVector3Array([
-			Vector3(side * 0.067, 0.042, -0.056),
-			Vector3(side * 0.105, 0.074, -0.065),
-			Vector3(side * 0.178, 0.079, -0.050),
-			Vector3(side * 0.19, 0.067, 0),
-			Vector3(side * 0.178, 0.079, 0.050),
-			Vector3(side * 0.105, 0.074, 0.065),
-			Vector3(side * 0.067, 0.042, 0.056)])
-		_append_spring(st, points, spring)
-		var stud := CylinderMesh.new()
-		stud.top_radius = 0.009
-		stud.bottom_radius = 0.009
-		stud.height = 0.012
-		stud.radial_segments = 10
-		stud.rings = 1
-		_fastener_part(st, stud, Transform3D(Basis.IDENTITY, Vector3(side * 0.153, 0.077, 0)), dark)
+			Vector3(side * 0.066, 0.048, -0.075),
+			Vector3(side * 0.105, 0.048, -0.081),
+			Vector3(side * 0.148, 0.036, -0.092),
+			Vector3(side * 0.173, 0.036, -0.067),
+			Vector3(side * 0.160, 0.045, -0.039),
+			Vector3(side * 0.126, 0.052, -0.026),
+			Vector3(side * 0.117, 0.052, 0.0),
+			Vector3(side * 0.126, 0.052, 0.026),
+			Vector3(side * 0.160, 0.045, 0.039),
+			Vector3(side * 0.173, 0.036, 0.067),
+			Vector3(side * 0.148, 0.036, 0.092),
+			Vector3(side * 0.105, 0.048, 0.081),
+			Vector3(side * 0.066, 0.048, 0.075)])
+		_append_spring(st, points, spring, 0.010)
+		_fastener_cylinder(st, Vector3(side * 0.14, 0.029, 0), 0.010, 0.070, bolt)
+		_fastener_cylinder(st, Vector3(side * 0.14, 0.066, 0), 0.034, 0.010, bolt)
+		_fastener_cylinder(st, Vector3(side * 0.14, 0.085, 0), 0.026, 0.028, bolt, 6)
+		_fastener_cylinder(st, Vector3(side * 0.14, 0.103, 0), 0.012, 0.012, spring)
+
 	var assembly := st.commit()
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
-	material.roughness = 0.72
-	material.metallic = 0.25
+	material.roughness = 0.48
+	material.metallic = 0.6
 	assembly.surface_set_material(0, material)
 	for start in range(0, seats.size(), 128):
 		var count := mini(128, seats.size() - start)
@@ -162,9 +165,10 @@ func _rail_seat_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var rings: Array[PackedVector3Array] = []
-	for section in [Vector4(0.32, 0.19, 0.0, 0.035),
-			Vector4(0.32, 0.19, 0.018, 0.035),
-			Vector4(0.225, 0.155, sleeper_height_m - 0.032, 0.035),
+	var concrete_height := sleeper_height_m - 0.014
+	for section in [Vector4(0.32, SEAT_HALF_LENGTH_M, 0.0, 0.035),
+			Vector4(0.32, SEAT_HALF_LENGTH_M, concrete_height / 7.0, 0.035),
+			Vector4(0.225, 0.155, concrete_height * 6.0 / 7.0, 0.035),
 			Vector4(0.207, 0.145, sleeper_height_m - 0.014, 0.025)]:
 		var x: float = section.x
 		var z: float = section.y
@@ -195,13 +199,13 @@ func _seat_triangle(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void
 		st.add_vertex(vertex)
 
 
-func _append_spring(st: SurfaceTool, controls: PackedVector3Array, color: Color) -> void:
+func _append_spring(st: SurfaceTool, controls: PackedVector3Array, color: Color, radius: float = 0.009, subdivisions: int = 6) -> void:
 	# Sweep one continuous round rod along a Catmull-Rom centreline.
 	var path := PackedVector3Array()
 	for i in range(controls.size() - 1):
-		for step in range(6):
+		for step in range(subdivisions):
 			path.append(controls[i].cubic_interpolate(controls[i + 1],
-				controls[maxi(0, i - 1)], controls[mini(controls.size() - 1, i + 2)], float(step) / 6.0))
+				controls[maxi(0, i - 1)], controls[mini(controls.size() - 1, i + 2)], float(step) / float(subdivisions)))
 	path.append(controls[-1])
 	var rings: Array[PackedVector3Array] = []
 	var normals: Array[PackedVector3Array] = []
@@ -214,7 +218,7 @@ func _append_spring(st: SurfaceTool, controls: PackedVector3Array, color: Color)
 		for j in range(8):
 			var angle := TAU * float(j) / 8.0
 			var normal := across * cos(angle) + vertical * sin(angle)
-			ring.append(path[i] + normal * 0.009)
+			ring.append(path[i] + normal * radius)
 			ring_normals.append(normal)
 		rings.append(ring)
 		normals.append(ring_normals)
@@ -235,3 +239,13 @@ func _append_spring(st: SurfaceTool, controls: PackedVector3Array, color: Color)
 				st.set_color(color)
 				st.set_normal(normal)
 				st.add_vertex(vertex)
+
+
+func _fastener_cylinder(st: SurfaceTool, center: Vector3, radius: float, height: float, color: Color, segments: int = 16) -> void:
+	var cylinder := CylinderMesh.new()
+	cylinder.top_radius = radius
+	cylinder.bottom_radius = radius
+	cylinder.height = height
+	cylinder.radial_segments = segments
+	cylinder.rings = 1
+	_fastener_part(st, cylinder, Transform3D(Basis.IDENTITY, center), color)

@@ -24,3 +24,7 @@
 
 ## 列车模型
 场景左侧轨道静态摆放一节头车和一节中间车，直接引用 train/models 下的 train1.glb、train2.glb、bogie0720.glb 和 wheelset0720.glb。每节车包含两台转向架和四组轮对，轮底对齐轨顶；在编辑器中展开 Train 可调整摆放。
+
+## LY 建筑
+参照 LY.jpg 增加白墙蓝边的 LY 用房及跨轨钢结构棚；包含卷帘门、防护窗、红色 LY 标识、屋面护栏、爬梯、排水管和混凝土场坪。尺寸按照片与轨距估算，棚顶高于接触网，建筑周边植被避让。几何按材质合批。
+按 5 切换建筑观察视角；使用 --reference-capture --ly-capture 导出 ly_preview.png。建筑生成代码为 ly_building.gd。

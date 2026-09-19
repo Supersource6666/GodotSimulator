@@ -20,6 +20,15 @@ if (-not (Test-Path -LiteralPath $GodotPath -PathType Leaf)) {
     throw 'Godot executable not found. Supply -GodotPath.'
 }
 
+# Import missing or changed resources before loading scenes. Source files and
+# .import metadata alone are not enough after copying or cloning the project.
+# Piping output also makes PowerShell wait for the Windows GUI executable.
+Write-Host 'Checking Godot resource imports...'
+& $GodotPath --headless --path $PSScriptRoot --editor --import | Out-Host
+if ($LASTEXITCODE -ne 0) {
+    throw "Godot resource import failed (exit code $LASTEXITCODE). Preview was not started."
+}
+
 # 调度台冒烟测试：直接运行调度台入口，验证方案与时刻表生成。
 $mainScene = 'res://app/local.tscn'
 if ($DispatchTest) {

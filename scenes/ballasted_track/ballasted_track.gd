@@ -34,11 +34,14 @@ func _ready() -> void:
 	_ballast()
 	_catenary()
 	_verges()
+	var ly := preload("res://scenes/ballasted_track/ly_building.gd").new()
+	ly.name = "LYFacility"
+	add_child(ly)
 	_build_camera()
 	_build_camera_reset()
 	_build_interface()
 	var label: Label = _info_panel.get_child(0)
-	label.text = "有砟轨道 / BALLASTED TRACK\n右键拖动 · WASD 移动 · Q/E 升降 · Shift 加速\nR 参考视角 · 2 道砟近景 · 3 全景 · 4 扣件特写 · F1 说明 · Esc 返回"
+	label.text = "有砟轨道 / BALLASTED TRACK\n右键拖动 · WASD 移动 · Q/E 升降 · Shift 加速\nR 参考视角 · 2 道砟近景 · 3 全景 · 4 扣件特写 · 5 LY建筑 · F1 说明 · Esc 返回"
 	_info_panel.hide()
 	if "--reference-capture" in OS.get_cmdline_user_args(): _capture_reference.call_deferred()
 	if "--demo-smoke-test" in OS.get_cmdline_user_args(): _finish_smoke_test.call_deferred()
@@ -212,12 +215,19 @@ func _unhandled_input(event: InputEvent) -> void:
 				_camera.fov = 69
 				_camera.position = Vector3(1.8,0.87,12)
 				_camera.rotation_degrees = Vector3(-30,35,0)
+			KEY_5:
+				_ly_camera()
 			KEY_4:
 				_hardware_camera()
 			KEY_3:
 				_camera.fov = 69
 				_camera.position = Vector3(9,6,20)
 				_camera.look_at(Vector3(-2,0,-24))
+
+func _ly_camera() -> void:
+	_camera.position = Vector3(2.0,3.8,1.0)
+	_camera.fov = 62
+	_camera.look_at(Vector3(-6,3,-18))
 
 func _hardware_camera() -> void:
 	_camera.position = Vector3(1.2,0.97,12.43)
@@ -227,6 +237,7 @@ func _hardware_camera() -> void:
 func _finish_smoke_test() -> void:
 	await get_tree().process_frame
 	var ok := stone_count>300000 and sleeper_count==2000 and get_node_or_null("SlopedBallastFormation")!=null
+	ok = ok and get_node_or_null("LYFacility/ServiceBuilding/LYSign") != null
 	var fastening_count := 0
 	for child in get_children():
 		if child is MultiMeshInstance3D: ok = ok and child.multimesh.mesh != null
@@ -244,10 +255,12 @@ func _capture_reference() -> void:
 		_camera.position = Vector3(1.8,0.87,12)
 		_camera.rotation_degrees = Vector3(-30,35,0)
 	if "--hardware-capture" in OS.get_cmdline_user_args(): _hardware_camera()
+	if "--ly-capture" in OS.get_cmdline_user_args(): _ly_camera()
 	for i in range(12): await get_tree().process_frame
 	await RenderingServer.frame_post_draw
 	var file := "detail.png" if "--detail-capture" in OS.get_cmdline_user_args() else "preview.png"
 	if "--hardware-capture" in OS.get_cmdline_user_args(): file = "fastening_detail.png"
+	if "--ly-capture" in OS.get_cmdline_user_args(): file = "ly_preview.png"
 	var error := get_viewport().get_texture().get_image().save_png("res://scenes/ballasted_track/"+file)
 	print("BALLASTED_CAPTURE ",error_string(error))
 	get_tree().quit(0 if error==OK else 1)

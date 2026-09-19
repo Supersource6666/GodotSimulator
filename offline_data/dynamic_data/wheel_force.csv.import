@@ -1,19 +1,3 @@
 [remap]
 
-importer="csv_translation"
-type="Translation"
-uid="uid://0itjxycruu1h"
-
-[deps]
-
-files=["res://offline_data/dynamic_data/wheel_force.0.translation", "res://offline_data/dynamic_data/wheel_force.8.622268677.translation", "res://offline_data/dynamic_data/wheel_force.112642.6797.translation", "res://offline_data/dynamic_data/wheel_force.3.71E.translation", "res://offline_data/dynamic_data/wheel_force.1996.444702.translation", "res://offline_data/dynamic_data/wheel_force.112245.7656.translation", "res://offline_data/dynamic_data/wheel_force.127178.4844.translation", "res://offline_data/dynamic_data/wheel_force.8.08E.translation", "res://offline_data/dynamic_data/wheel_force.2250.26123.translation", "res://offline_data/dynamic_data/wheel_force.127579.8125.translation", "res://offline_data/dynamic_data/wheel_force.127174.9063.translation", "res://offline_data/dynamic_data/wheel_force.2249.968018.translation", "res://offline_data/dynamic_data/wheel_force.127562.1719.translation", "res://offline_data/dynamic_data/wheel_force.8.508610725.translation", "res://offline_data/dynamic_data/wheel_force.112645.5938.translation", "res://offline_data/dynamic_data/wheel_force.4.26E.translation", "res://offline_data/dynamic_data/wheel_force.1996.58252.translation", "res://offline_data/dynamic_data/wheel_force.112253.9141.translation"]
-
-source_file="res://offline_data/dynamic_data/wheel_force.csv"
-dest_files=["res://offline_data/dynamic_data/wheel_force.0.translation", "res://offline_data/dynamic_data/wheel_force.8.622268677.translation", "res://offline_data/dynamic_data/wheel_force.112642.6797.translation", "res://offline_data/dynamic_data/wheel_force.3.71E.translation", "res://offline_data/dynamic_data/wheel_force.1996.444702.translation", "res://offline_data/dynamic_data/wheel_force.112245.7656.translation", "res://offline_data/dynamic_data/wheel_force.127178.4844.translation", "res://offline_data/dynamic_data/wheel_force.8.08E.translation", "res://offline_data/dynamic_data/wheel_force.2250.26123.translation", "res://offline_data/dynamic_data/wheel_force.127579.8125.translation", "res://offline_data/dynamic_data/wheel_force.127174.9063.translation", "res://offline_data/dynamic_data/wheel_force.2249.968018.translation", "res://offline_data/dynamic_data/wheel_force.127562.1719.translation", "res://offline_data/dynamic_data/wheel_force.8.508610725.translation", "res://offline_data/dynamic_data/wheel_force.112645.5938.translation", "res://offline_data/dynamic_data/wheel_force.4.26E.translation", "res://offline_data/dynamic_data/wheel_force.1996.58252.translation", "res://offline_data/dynamic_data/wheel_force.112253.9141.translation"]
-
-[params]
-
-compress=1
-delimiter=0
-unescape_keys=false
-unescape_translations=true
+importer="keep"

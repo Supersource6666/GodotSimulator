@@ -17,7 +17,7 @@ var overhead_lines: Array[Node3D] = []
 var pantograph: Node3D
 const LENGTH := 1000.0
 const START := 45.0
-const RAIL_TOP := 0.46
+const RAIL_TOP := 0.397
 const TRAIN_HEAD_START_Z := -42.0
 const TRAIN_HEAD_END_Z := -850.0
 # 轮对（wheelset0720.glb）统一材质色：模型自带 5 种彩色材质，此处统一为单一颜色。
@@ -469,6 +469,8 @@ func _corridor() -> void:
 	root.name = "DoubleTrackCutting"
 	add_child(root)
 	var concrete := _surface("777b74", "b7b8ac", 1.5)
+	# Uniform slab colour removes the procedural mottling from the track bed.
+	var slab_material := _mat("979a90", 0.82)
 	_box(root, "Formation", Vector3(0, -0.25, START - LENGTH / 2), Vector3(15, 0.5, LENGTH), _surface("444b49", "777d77", 0.4))
 	for side in [-1.0, 1.0]:
 		var x: float = side * 2.3
@@ -476,7 +478,7 @@ func _corridor() -> void:
 		track.name = "LeftTrack" if side < 0 else "RightTrack"
 		track.ballast_width_m = 3.4
 		track.ballast_height_m = 0.16
-		track.sleeper_height_m = 0.14
+		track.sleeper_height_m = 0.077 # 63 mm concrete seat + 14 mm pad.
 		track.rail_height_m = 0.16
 		track.rail_head_width_m = 0.07
 		# 1.435 m between inner rail-head faces, 1.505 m between centres.
@@ -488,7 +490,7 @@ func _corridor() -> void:
 			samples.append({"point": Vector3(x, 0, START - d), "forward": Vector3.FORWARD, "right": Vector3.RIGHT, "up": Vector3.UP, "distance": float(d)})
 		track.set_custom_samples(samples)
 		track.generate_track_mesh()
-		track.mesh.surface_set_material(0, concrete)
+		track.mesh.surface_set_material(0, slab_material)
 		tracks.append(track)
 		_box(root, "ServicePath", Vector3(side * 5.5, 0.025, START - LENGTH / 2), Vector3(1.25, 0.12, LENGTH), concrete)
 		_box(root, "DrainChannel", Vector3(side * 6.4, -0.03, START - LENGTH / 2), Vector3(0.45, 0.07, LENGTH), _mat("303b39"))

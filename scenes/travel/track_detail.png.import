@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dkidxplfgonlt"
-path="res://.godot/imported/preview.png-fa3bcb76719475d2ce705c64e4904af2.ctex"
+uid="uid://du22hhauybh5n"
+path="res://.godot/imported/track_detail.png-44952143f734e6def9b8e74fa86fb7e9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://scenes/ballastless_track/preview.png"
-dest_files=["res://.godot/imported/preview.png-fa3bcb76719475d2ce705c64e4904af2.ctex"]
+source_file="res://scenes/travel/track_detail.png"
+dest_files=["res://.godot/imported/track_detail.png-44952143f734e6def9b8e74fa86fb7e9.ctex"]
 
 [params]
 

@@ -101,6 +101,8 @@ func build(length: int) -> void:
 			var variant := rng.randi_range(0,2) if tall else rng.randi_range(3,5)
 			var x := rng.randf_range(7.2,17.0) if right else rng.randf_range(-27,-11)
 			var z := 18.0-chunk-rng.randf_range(0,24)
+			# Keep the LY building apron clear without changing plant counts.
+			if x < -6.0 and z > -24.0 and z < -2.0: x -= 17.0
 			var scale := rng.randf_range(0.75,1.2) if right else rng.randf_range(0.45,0.85)
 			buckets[variant].append(Transform3D(Basis(Vector3.UP,rng.randf()*TAU).scaled(Vector3(scale,scale*rng.randf_range(0.85,1.12),scale)),Vector3(x,-0.10,z)))
 			plant_count += 1
@@ -123,6 +125,8 @@ func build(length: int) -> void:
 		for i in range(1100):
 			var x := rng.randf_range(4.45,9.5) if i%2==0 else rng.randf_range(-10.8,-7.0)
 			var z := 18.0-chunk-rng.randf_range(0,24)
+			# Keep the LY building apron clear without changing plant counts.
+			if x < -6.0 and z > -24.0 and z < -2.0: x -= 17.0
 			var scale := rng.randf_range(0.5,1.5)
 			grasses.append(Transform3D(Basis(Vector3.UP,rng.randf()*TAU).scaled(Vector3.ONE*scale),Vector3(x,-0.10,z)))
 		var instance := Batch.batch(self,"WildVergeGrass_%d"%chunk,grass,grasses,125)
