@@ -7,7 +7,7 @@
     [string]$ExternalProject = 'E:\game_project',
     [switch]$Loop,
     [switch]$Cab,
-    # 调度台相关参数。
+    # Dispatch console options.
     [switch]$SkipDispatch,
     [string]$PlanFile,
     [string]$TrainNumber,
@@ -16,6 +16,8 @@
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'tools/godot-progress.ps1')
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 if (-not (Test-Path -LiteralPath $GodotPath -PathType Leaf)) {
     throw 'Godot executable not found. Supply -GodotPath.'
 }
@@ -24,12 +26,12 @@ if (-not (Test-Path -LiteralPath $GodotPath -PathType Leaf)) {
 # .import metadata alone are not enough after copying or cloning the project.
 # Piping output also makes PowerShell wait for the Windows GUI executable.
 Write-Host 'Checking Godot resource imports...'
-& $GodotPath --headless --path $PSScriptRoot --editor --import | Out-Host
+& $GodotPath --headless --path $PSScriptRoot --editor --import | Convert-GodotProgressToEnglish | Out-Host
 if ($LASTEXITCODE -ne 0) {
     throw "Godot resource import failed (exit code $LASTEXITCODE). Preview was not started."
 }
 
-# 调度台冒烟测试：直接运行调度台入口，验证方案与时刻表生成。
+# Run the dispatch console directly to smoke-test plan and timetable generation.
 $mainScene = 'res://app/local.tscn'
 if ($DispatchTest) {
     $mainScene = 'res://app/dispatch/dispatch_console.tscn'

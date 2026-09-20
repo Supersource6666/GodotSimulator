@@ -1,20 +1,22 @@
-param(
+﻿param(
     [string]$PythonPath = 'E:\cv4EngineAdjust\ANACONDA\python.exe',
     [string]$GodotPath = 'E:\Godot_v4.7\Godot_v4.7-stable_win64_console.exe',
     [switch]$VerifyOnly,
     [switch]$Replan
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'tools/godot-progress.ps1')
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $offlineOldProxy = $env:HTTPS_PROXY
 $offlineOldImport = $env:GODOT_OFFLINE_IMPORT
 function Invoke-OfflineImport {
     # Godot 4.7 may report get_multiple_md5/f.is_null while replacing a texture
     # cache with a different compression format. Require a clean second pass;
     # persistent failures must still stop the build.
-    & $GodotPath --headless --path $PSScriptRoot --editor --import
+    & $GodotPath --headless --path $PSScriptRoot --editor --import | Convert-GodotProgressToEnglish | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Write-Host 'Rechecking import after generated texture cache updates...'
-        & $GodotPath --headless --path $PSScriptRoot --editor --import
+        & $GodotPath --headless --path $PSScriptRoot --editor --import | Convert-GodotProgressToEnglish | Out-Host
         if ($LASTEXITCODE -ne 0) { throw 'Godot resource import failed twice.' }
     }
 }
