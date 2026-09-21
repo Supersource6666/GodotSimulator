@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c7jv4gsdsp6dd"
-path="res://.godot/imported/LeftInnerSensor.png-afa4ff5fbbb9c8b02ff5183c3fe372ba.ctex"
+uid="uid://djr8wrmvssc12"
+path="res://.godot/imported/HXD3D_locomotive_green_0.png-bb901b7996a1e0d2e373c979c596d4b4.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "43aaf9b33dcbd5a79e6f87a63346ae96"
 }
 
 [deps]
 
-source_file="res://scenes/track_side/captures/laser_off/LeftInnerSensor.png"
-dest_files=["res://.godot/imported/LeftInnerSensor.png-afa4ff5fbbb9c8b02ff5183c3fe372ba.ctex"]
+source_file="res://scenes/ballasted_track/train/models/HXD3D_locomotive_green_0.png"
+dest_files=["res://.godot/imported/HXD3D_locomotive_green_0.png-bb901b7996a1e0d2e373c979c596d4b4.ctex"]
 
 [params]
 
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

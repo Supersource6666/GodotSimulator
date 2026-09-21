@@ -13,6 +13,7 @@ const WheelsetDisplacementChart := preload("res://scenes/travel/wheelset_displac
 const AttackAngleChart := preload("res://scenes/travel/attack_angle_chart.gd")
 const OverheadLine = preload("res://scenes/travel/overhead_line.gd")
 const Pantograph = preload("res://scenes/travel/pantograph.gd")
+const SimulationStreamReceiver = preload("res://scenes/travel/simulation_stream_receiver.gd")
 var overhead_lines: Array[Node3D] = []
 var pantograph: Node3D
 const LENGTH := 1000.0
@@ -86,6 +87,7 @@ void light() {
 }
 """
 var train: Node3D
+var simulation_stream: Node
 var camera: Camera3D
 var arch_count := 0
 var tracks: Array[MeshInstance3D] = []
@@ -119,6 +121,10 @@ var wheel_watch: Node3D
 var wheel_view := false
 
 func _ready() -> void:
+	if "--stream-smoke-test" in OS.get_cmdline_user_args():
+		_train()
+		_setup_simulation_stream()
+		return
 	_environment()
 	_corridor()
 	_slopes()
@@ -144,6 +150,7 @@ func _ready() -> void:
 	_build_camera_controls(layer)
 	_sync_camera_controls()
 	_build_progress_bar(layer)
+	_setup_simulation_stream()
 	derail_chart = DerailChart.new()
 	derail_chart.name = "DerailChart"
 	layer.add_child(derail_chart)
@@ -358,6 +365,27 @@ func _on_progress_changed(value: float) -> void:
 	if derail_chart != null:
 		derail_chart.set_progress(value / 100.0)
 
+
+func _setup_simulation_stream() -> void:
+	simulation_stream = SimulationStreamReceiver.new()
+	simulation_stream.name = "SimulationStreamReceiver"
+	add_child(simulation_stream)
+	simulation_stream.attach_train(train)
+	simulation_stream.state_received.connect(_on_simulation_stream_state)
+
+
+func _on_simulation_stream_state(state: Dictionary) -> void:
+	if "--stream-smoke-test" in OS.get_cmdline_user_args():
+		if int(state.get("seq", -1)) >= 10:
+			print("TRAVEL_STREAM_SMOKE PASS seq=", int(state.get("seq", -1)))
+			get_tree().quit(0)
+		return
+	var duration := maxf(float(state.get("duration", 0.0)), 0.001)
+	var simulation_time := float(state.get("t", 0.0))
+	_set_train_progress(simulation_time / duration)
+	if progress_label != null:
+		progress_label.text = "实时  %.3f / %.3f s   里程 %.3f m" % [
+			simulation_time, duration, float(state.get("mileage_m", 0.0))]
 
 func _set_train_progress(value: float) -> void:
 	if train == null:

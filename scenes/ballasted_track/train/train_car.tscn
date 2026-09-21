@@ -1,15 +1,15 @@
 [gd_scene format=3]
 
-[ext_resource type="PackedScene" path="res://scenes/ballasted_track/train/models/train1.glb" id="2_train1"]
+[ext_resource type="Script" path="res://scenes/ballasted_track/train/ballasted_train_car_realtime.gd" id="1_script"]
+
 [ext_resource type="PackedScene" path="res://scenes/ballasted_track/train/models/bogie0720.glb" id="3_bogie"]
 [ext_resource type="PackedScene" path="res://scenes/ballasted_track/train/models/wheelset0720.glb" id="4_wheelset"]
 
 [node name="TrainCar" type="Node3D"]
+script = ExtResource("1_script")
 
 [node name="ModelMount" type="Marker3D" parent="."]
 
-[node name="Model" parent="ModelMount" instance=ExtResource("2_train1")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.007254839, 0.5, -0.011656284)
 
 [node name="RunningGear" type="Node3D" parent="."]
 

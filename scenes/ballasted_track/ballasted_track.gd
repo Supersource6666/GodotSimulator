@@ -18,15 +18,15 @@ func _ready() -> void:
 	env.sky.sky_material = sky_material
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color("b5bec1")
-	env.ambient_light_energy = 0.62
+	env.ambient_light_energy = 0.50
 	env.ssao_enabled = false
-	env.fog_density = 0.0011
+	env.fog_density = 0.00055
 	env.fog_light_color = Color("c4cecc")
-	env.fog_light_energy = 0.55
+	env.fog_light_energy = 0.32
 	env.fog_sky_affect = 0.05
 	var sun: DirectionalLight3D = get_node("Sunlight")
 	sun.light_color = Color("f5f4ee")
-	sun.light_energy = 0.72
+	sun.light_energy = 0.82
 	sun.light_angular_distance = 2.5
 	sun.directional_shadow_max_distance = 110.0
 	_ground()

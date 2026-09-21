@@ -28,3 +28,20 @@
 ## LY 建筑
 参照 LY.jpg 增加白墙蓝边的 LY 用房及跨轨钢结构棚；包含卷帘门、防护窗、红色 LY 标识、屋面护栏、爬梯、排水管和混凝土场坪。尺寸按照片与轨距估算，棚顶高于接触网，建筑周边植被避让。几何按材质合批。
 按 5 切换建筑观察视角；使用 --reference-capture --ly-capture 导出 ly_preview.png。建筑生成代码为 ly_building.gd。
+
+## 31DOF 实时数据与平断面轨道
+
+场景入口现使用 `ballasted_track_realtime.gd`：启动时读取 `data/ping_duan_mian.csv`，重建 8 km 曲线轨道系统，并监听 `railway31dof.v1` 或 `railway_ltd.v1` UDP 数据（默认 `127.0.0.1:49000`）。求解器使用 `--godot-stream` 后，列车按绝对里程沿中心线运行，车体、构架、轮对与车轮滚动同步更新。
+
+## LTD 实时驱动
+
+场景启动后，从 `simulation_platform` 根目录运行：
+
+```powershell
+.\build\railway_vehicle\Release\railway_ltd.exe `
+  --config applications/railway_vehicle/config/25t_yz_loaded_3d_measured_plan_180s.json `
+  --duration 180 --dt 0.001 `
+  --godot-stream
+```
+
+LTD 在线模式每步同步计算和发送，不写入结果文件；场景使用绝对里程驱动整列车沿重建线路运行，并使用实时速度驱动车轮滚动。
