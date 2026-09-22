@@ -11,6 +11,7 @@ const LocomotiveLivery = preload("res://scenes/ballasted_track/train/locomotive_
 const TrainCarScene = preload("res://scenes/ballasted_track/train/train_car.tscn")
 const WaggonScene = preload("res://scenes/ballasted_track/train/models/HXD3D_waggon.glb")
 const SpeedChart = preload("res://scenes/ballasted_track/speed_chart.gd")
+const OpenRailwayMapMiniMap = preload("res://shared/openrailwaymap_mini_map.gd")
 
 const PROFILE_PATH := "res://scenes/ballasted_track/data/ping_duan_mian.csv"
 const ROUTE_LENGTH_M := 8000.0
@@ -64,6 +65,7 @@ var _target_stream_state: Dictionary = {}
 var _shutdown_requested := false
 var _cab_view_enabled := false
 var _speed_chart
+var _mini_map
 
 
 func _ready() -> void:
@@ -80,6 +82,7 @@ func _ready() -> void:
 		_setup_realtime_stream()
 		return
 	super._ready()
+	_setup_mini_map()
 	_setup_speed_panel()
 	_setup_locomotive_materials()
 	_setup_waggon_livery()
@@ -105,6 +108,15 @@ func _setup_speed_panel() -> void:
 	_speed_chart.offset_right = -20.0
 	_speed_chart.offset_bottom = -20.0
 	layer.add_child(_speed_chart)
+
+
+func _setup_mini_map() -> void:
+	var layer := get_node_or_null("SceneInterface") as CanvasLayer
+	if layer == null:
+		return
+	_mini_map = OpenRailwayMapMiniMap.new()
+	layer.add_child(_mini_map)
+	_mini_map.set_route_distance(0.0)
 
 func _coach_type(number: int) -> String:
 	if number <= 8:
@@ -272,6 +284,8 @@ func _update_cab_camera(train_root: Node3D) -> void:
 
 func _apply_visual_state(state: Dictionary) -> void:
 	_latest_mileage_m = float(state.get("mileage_m", route_profile.first_mileage_m))
+	if _mini_map != null:
+		_mini_map.set_route_distance(_latest_mileage_m - route_profile.first_mileage_m)
 	var train_root := get_node_or_null("Train") as Node3D
 	if train_root != null:
 		var car_index := 0
@@ -737,6 +751,7 @@ func _finish_smoke_test() -> void:
 	ok = ok and get_node_or_null("ContinuousBallastBed") != null
 	ok = ok and simulation_stream != null
 	ok = ok and _speed_chart != null
+	ok = ok and _mini_map != null
 	ok = ok and _catenary_mast_count > 300 and _catenary_wire_count > 7000
 	ok = ok and _pantograph != null
 	ok = ok and _lead_model_size.distance_to(Vector3(3.1008, 4.3011, 20.8490)) < 0.05
