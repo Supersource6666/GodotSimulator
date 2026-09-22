@@ -10,6 +10,7 @@ const WaggonLivery = preload("res://scenes/ballasted_track/train/waggon_green_li
 const LocomotiveLivery = preload("res://scenes/ballasted_track/train/locomotive_livery.gdshader")
 const TrainCarScene = preload("res://scenes/ballasted_track/train/train_car.tscn")
 const WaggonScene = preload("res://scenes/ballasted_track/train/models/HXD3D_waggon.glb")
+const KeyboardDriver = preload("res://scenes/ballasted_track/keyboard_train_driver.gd")
 const SpeedChart = preload("res://scenes/ballasted_track/speed_chart.gd")
 const OpenRailwayMapMiniMap = preload("res://shared/openrailwaymap_mini_map.gd")
 
@@ -66,6 +67,11 @@ var _shutdown_requested := false
 var _cab_view_enabled := false
 var _speed_chart
 var _mini_map
+var _input_source := "udp"
+var _keyboard_initialized := false
+var _source_option: OptionButton
+var _control_status_label: Label
+var _keyboard_driver := KeyboardDriver.new()
 
 
 func _ready() -> void:
@@ -96,6 +102,7 @@ func _setup_realtime_stream() -> void:
 	add_child(simulation_stream)
 	simulation_stream.attach_train(get_node_or_null("Train") as Node3D)
 	simulation_stream.state_received.connect(_on_simulation_state)
+	_setup_input_controls()
 func _setup_speed_panel() -> void:
 	var layer := get_node_or_null("SceneInterface") as CanvasLayer
 	if layer == null:
@@ -251,6 +258,8 @@ func _setup_locomotive_materials() -> void:
 		" textured_livery_materials=", textured_livery_materials)
 
 func _on_simulation_state(state: Dictionary) -> void:
+	if _input_source != "udp":
+		return
 	_target_stream_state = state.duplicate()
 	_last_stream_receive_usec = Time.get_ticks_usec()
 	if not _has_stream_state:
@@ -283,6 +292,7 @@ func _update_cab_camera(train_root: Node3D) -> void:
 
 
 func _apply_visual_state(state: Dictionary) -> void:
+	_update_control_status(float(state.get("speed_m_s", 0.0)))
 	_latest_mileage_m = float(state.get("mileage_m", route_profile.first_mileage_m))
 	if _mini_map != null:
 		_mini_map.set_route_distance(_latest_mileage_m - route_profile.first_mileage_m)
@@ -316,7 +326,7 @@ func _apply_visual_state(state: Dictionary) -> void:
 	if _info_panel != null and _info_panel.get_child_count() > 0:
 		var label := _info_panel.get_child(0) as Label
 		if label != null:
-			var stream_mode := "LTD" if state.get("schema", "") == "railway_ltd.v1" else "31DOF"
+			var stream_mode := "KEYBOARD" if _input_source == "keyboard" else ("LTD" if state.get("schema", "") == "railway_ltd.v1" else "31DOF")
 			var view_mode := "CAB" if _cab_view_enabled else "CHASE"
 			label.text = "Ballasted Track / REALTIME %s / %s\nMileage %.3f m  Speed %.1f km/h  Seq %d\nC or 6: cab view    V: speed panel" % [
 				stream_mode, view_mode, _latest_mileage_m,
@@ -699,7 +709,9 @@ func _verges() -> void:
 	add_child(root)
 
 func _process(delta: float) -> void:
-	if _has_stream_state:
+	if _input_source == "keyboard":
+		_update_keyboard_control(delta)
+	elif _has_stream_state:
 		var packet_age_s := float(Time.get_ticks_usec() - _last_stream_receive_usec) / 1000000.0
 		var prediction_age_s := minf(packet_age_s, maximum_stream_prediction_s)
 		var target_mileage := float(_target_stream_state.get("mileage_m", _display_mileage_m))
@@ -719,7 +731,8 @@ func _process(delta: float) -> void:
 		_apply_visual_state(visual_state)
 	if _camera == null:
 		return
-	super._process(delta)
+	if _input_source != "keyboard":
+		super._process(delta)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
@@ -780,3 +793,104 @@ func _clean_shutdown(exit_code: int) -> void:
 	await get_tree().process_frame
 	get_tree().quit(exit_code)
 
+
+
+func _setup_input_controls() -> void:
+	_display_mileage_m = route_profile.first_mileage_m + 50.0
+	_latest_mileage_m = _display_mileage_m
+	var plan: Dictionary = {}
+	var context := get_node_or_null("/root/DispatchContext")
+	if context != null:
+		plan = context.resolve()
+	if plan.get("module", "") != "ballasted_track":
+		plan = {}
+	_keyboard_driver.end_mileage_m = route_profile.first_mileage_m + ROUTE_LENGTH_M
+	var layer := get_node_or_null("SceneInterface") as CanvasLayer
+	if layer != null:
+		var panel := PanelContainer.new()
+		panel.name = "TrainControlConsole"
+		panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		panel.offset_left = -450.0
+		panel.offset_right = -20.0
+		panel.offset_top = 80.0
+		var box := VBoxContainer.new()
+		box.add_theme_constant_override("separation", 8)
+		panel.add_child(box)
+		var title := Label.new()
+		title.text = "列车控制台 / TRAIN CONTROL"
+		box.add_child(title)
+		_source_option = OptionButton.new()
+		_source_option.name = "InputSource"
+		_source_option.add_item("数据输入: UDP / 外部仿真")
+		_source_option.add_item("数据输入: 键盘 / Keyboard")
+		box.add_child(_source_option)
+		_source_option.item_selected.connect(func(index: int):
+			_set_input_source("keyboard" if index == 1 else "udp"))
+		_control_status_label = Label.new()
+		box.add_child(_control_status_label)
+		var help := Label.new()
+		help.text = "W: 按住牵引前进   S: 按住制动\n松开: 惰行   W+S: 制动优先\nC / 6: 司机室   V: 速度曲线"
+		box.add_child(help)
+		layer.add_child(panel)
+	var source := str(plan.get("input_source", "udp"))
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--input-source="):
+			source = argument.trim_prefix("--input-source=")
+	_set_input_source(source)
+
+
+func _set_input_source(source: String) -> void:
+	var previous_speed := _keyboard_driver.speed_mps if _input_source == "keyboard" else 0.0
+	if source == "keyboard" and not _keyboard_initialized:
+		previous_speed = KeyboardDriver.INITIAL_SPEED_MPS
+	if _input_source == "udp" and _has_stream_state and Time.get_ticks_usec() - _last_stream_receive_usec < 1000000:
+		previous_speed = float(_target_stream_state.get("speed_m_s", 0.0))
+	_input_source = "keyboard" if source == "keyboard" else "udp"
+	simulation_stream.set_input_enabled(_input_source == "udp")
+	_has_stream_state = false
+	_target_stream_state.clear()
+	_keyboard_driver.mileage_m = _display_mileage_m
+	_keyboard_driver.speed_mps = clampf(previous_speed, 0.0, _keyboard_driver.maximum_speed_mps)
+	_keyboard_driver.time_s = 0.0
+	if _source_option != null:
+		_source_option.select(1 if _input_source == "keyboard" else 0)
+	if _speed_chart != null:
+		_speed_chart.reset_history()
+	var displayed_speed := 0.0
+	if _input_source == "keyboard":
+		_keyboard_initialized = true
+		displayed_speed = _keyboard_driver.speed_mps
+		_keyboard_driver.control_status = "COASTING" if displayed_speed > 0.0 else "STOPPED"
+		simulation_stream.set_preview_speed(displayed_speed)
+		if _speed_chart != null:
+			_speed_chart.add_sample(0.0, displayed_speed)
+	_apply_visual_state({"mileage_m": _display_mileage_m, "speed_m_s": displayed_speed})
+	print("BALLASTED_INPUT_SOURCE ", _input_source)
+
+
+func _update_keyboard_control(delta: float) -> void:
+	var focused := get_viewport().gui_get_focus_owner()
+	var controls_allowed := get_window().has_focus() and not (focused is LineEdit or focused is TextEdit)
+	if _source_option != null and _source_option.get_popup().visible:
+		controls_allowed = false
+	_step_keyboard_control(delta,
+		controls_allowed and Input.is_physical_key_pressed(KEY_W),
+		controls_allowed and Input.is_physical_key_pressed(KEY_S))
+
+
+func _step_keyboard_control(delta: float, traction: bool, brake: bool) -> void:
+	var state := _keyboard_driver.advance(delta, traction, brake)
+	_display_mileage_m = _keyboard_driver.mileage_m
+	simulation_stream.set_preview_speed(_keyboard_driver.speed_mps)
+	_apply_visual_state(state)
+	if _speed_chart != null:
+		_speed_chart.add_sample(_keyboard_driver.time_s, _keyboard_driver.speed_mps)
+
+
+func _update_control_status(speed_mps: float) -> void:
+	if _control_status_label == null:
+		return
+	var status := _keyboard_driver.control_status if _input_source == "keyboard" else ("UDP LIVE" if _has_stream_state else "WAITING FOR UDP")
+	if _input_source == "udp" and _has_stream_state and Time.get_ticks_usec() - _last_stream_receive_usec > 1000000:
+		status = "UDP STALE"
+	_control_status_label.text = "%s  |  %.1f km/h  |  Limit %.0f km/h" % [status, speed_mps * 3.6, _keyboard_driver.maximum_speed_mps * 3.6]

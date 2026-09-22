@@ -34,6 +34,7 @@ var _route_title: Label
 var _direction_warning: Label
 var _direction_option: OptionButton
 
+var _input_source_option: OptionButton
 var _service_option: OptionButton
 var _number_edit: LineEdit
 var _car_option: OptionButton
@@ -168,6 +169,12 @@ func _build_config_panel() -> PanelContainer:
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(body)
+	if _module_id == "ballasted_track":
+		_input_source_option = OptionButton.new()
+		_input_source_option.add_item("UDP / 外部仿真")
+		_input_source_option.add_item("键盘 / W 牵引、S 制动")
+		body.add_child(_label_row("数据输入", _input_source_option))
+		_input_source_option.item_selected.connect(func(_index): _on_plan_edited())
 	_service_option = OptionButton.new()
 	for service in _dispatch_config.get("services", []):
 		if service is Dictionary:
@@ -481,6 +488,8 @@ func _on_service_changed(index: int) -> void:
 
 
 func _read_plan_from_ui() -> void:
+	if _input_source_option != null:
+		_plan["input_source"] = "keyboard" if _input_source_option.selected == 1 else "udp"
 	if _service_option != null:
 		var selected := _service_option.selected
 		var services: Array = _dispatch_config.get("services", [])
@@ -524,6 +533,8 @@ func _read_plan_from_ui() -> void:
 
 func _write_plan_to_ui() -> void:
 	_updating = true
+	if _input_source_option != null:
+		_input_source_option.select(1 if _plan.get("input_source", "udp") == "keyboard" else 0)
 	if _service_option != null:
 		var key := str(_plan.get("service_key", ""))
 		for index in range(_service_option.item_count):

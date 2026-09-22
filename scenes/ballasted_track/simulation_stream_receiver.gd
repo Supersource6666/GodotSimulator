@@ -16,6 +16,7 @@ signal stream_error(message: String)
 @export var roll_sign := -1.0
 @export_range(1.0, 1000000.0, 1.0) var force_reference_N := 77033.025
 
+var input_enabled := true
 var _udp := PacketPeerUDP.new()
 var _bindings: Array[Dictionary] = []
 var _last_sequence := -1
@@ -86,7 +87,7 @@ func _process(_delta: float) -> void:
 	var queued := _udp.get_available_packet_count()
 	while _udp.get_available_packet_count() > 0:
 		newest = _udp.get_packet()
-	if newest.is_empty():
+	if newest.is_empty() or not input_enabled:
 		return
 	var parsed = JSON.parse_string(newest.get_string_from_utf8())
 	if not (parsed is Dictionary):
@@ -166,3 +167,27 @@ func _apply_pose(node: Node3D, base: Transform3D, state: Array, reference: Array
 	var delta_basis := Basis.from_euler(Vector3(pitch, yaw, roll))
 	node.transform = Transform3D(base.basis * delta_basis,
 		base.origin + Vector3(lateral, vertical, 0.0))
+
+
+func set_input_enabled(enabled: bool) -> void:
+	# Discard queued packets on both transitions; a restarted solver may use seq=0.
+	input_enabled = enabled
+	while _udp.get_available_packet_count() > 0:
+		_udp.get_packet()
+	_last_sequence = -1
+	_last_simulation_time = 0.0
+	last_state.clear()
+	set_preview_speed(0.0)
+	for binding in _bindings:
+		(binding.body as Node3D).transform = binding.body_base
+		for i in range(2):
+			(binding.bogies[i] as Node3D).transform = binding.bogie_bases[i]
+		for i in range(4):
+			(binding.wheelsets[i] as Node3D).transform = binding.wheelset_bases[i]
+
+
+func set_preview_speed(speed_mps: float) -> void:
+	for binding in _bindings:
+		var vehicle := binding.vehicle as Node3D
+		if vehicle.has_method("set_wheel_speed"):
+			vehicle.call("set_wheel_speed", speed_mps)

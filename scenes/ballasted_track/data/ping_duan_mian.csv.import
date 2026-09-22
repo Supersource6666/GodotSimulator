@@ -15,5 +15,3 @@ dest_files=["res://scenes/ballasted_track/data/ping_duan_mian.curvature.translat
 
 compress=1
 delimiter=0
-unescape_keys=false
-unescape_translations=true

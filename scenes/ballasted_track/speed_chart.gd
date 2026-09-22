@@ -1,4 +1,4 @@
-﻿extends Control
+extends Control
 ## Lightweight rolling speed plot for the realtime railway scene.
 
 @export_range(10.0, 300.0, 5.0) var history_seconds := 60.0
@@ -80,3 +80,9 @@ func _draw() -> void:
 			plot.end.y - plot.size.y * y_fraction))
 	draw_polyline(points, Color("55e39a"), 2.4, true)
 	draw_circle(points[-1], 3.8, Color("e7d34e"))
+
+
+func reset_history() -> void:
+	_samples.clear()
+	_current_speed_kmh = 0.0
+	queue_redraw()
