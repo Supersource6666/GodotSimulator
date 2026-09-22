@@ -38,25 +38,25 @@ func _draw() -> void:
 	for point in route_points:
 		screen_route.append(_project(point))
 	if screen_route.size() >= 2:
-		draw_polyline(screen_route, Color(0.02, 0.03, 0.04, 0.82), 7.0, true)
-		draw_polyline(screen_route, Color("ff5a36"), 3.2, true)
+		draw_polyline(screen_route, Color(0.02, 0.03, 0.04, 0.82), 6.0, true)
+		draw_polyline(screen_route, Color("ff5a36"), 2.8, true)
 
 	for station in stations:
 		var station_position := _project(station.geo)
-		draw_circle(station_position, 5.5, Color(0.04, 0.08, 0.10, 0.92))
-		draw_circle(station_position, 3.1, Color("fff5d6"))
-		draw_string(ThemeDB.fallback_font, station_position + Vector2(8.0, -6.0),
-			String(station.name), HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13, Color.WHITE)
+		draw_circle(station_position, 5.0, Color(0.04, 0.08, 0.10, 0.92))
+		draw_circle(station_position, 2.8, Color("fff5d6"))
+		draw_string(ThemeDB.fallback_font, station_position + Vector2(7.0, -5.0),
+			String(station.name), HORIZONTAL_ALIGNMENT_LEFT, -1.0, 12, Color.WHITE)
 
 	var train_geo := _route_geo_at_distance(progress_m)
 	var marker := _project(train_geo)
-	draw_circle(marker + Vector2(1.5, 2.0), 9.5, Color(0, 0, 0, 0.5))
-	draw_circle(marker, 8.0, Color("36d8ff"))
-	draw_circle(marker, 3.2, Color.WHITE)
-	draw_string(ThemeDB.fallback_font, Vector2(9.0, 19.0), "0001  京广铁路",
-		HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14, Color("fff2cf"))
-	draw_string(ThemeDB.fallback_font, Vector2(9.0, size.y - 9.0), "郑州站 → 南向 50 km",
-		HORIZONTAL_ALIGNMENT_LEFT, -1.0, 12, Color("e9f2f5"))
+	draw_circle(marker + Vector2(1.2, 1.6), 8.5, Color(0, 0, 0, 0.5))
+	draw_circle(marker, 7.0, Color("36d8ff"))
+	draw_circle(marker, 2.8, Color.WHITE)
+	draw_string(ThemeDB.fallback_font, Vector2(8.0, 17.0), "0001  京广铁路",
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13, Color("fff2cf"))
+	draw_string(ThemeDB.fallback_font, Vector2(8.0, size.y - 8.0), "郑州站 → 南向 50 km",
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, 11, Color("e9f2f5"))
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.72, 0.82, 0.86, 0.78), false, 1.0)
 
 

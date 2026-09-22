@@ -69,6 +69,10 @@ var _speed_chart
 var _mini_map
 var _input_source := "udp"
 var _keyboard_initialized := false
+var _udp_mileage_offset_m := 0.0
+var _udp_rebase_on_next_state := false
+var _udp_rebase_target_mileage_m := 0.0
+var _train_paused := false
 var _source_option: OptionButton
 var _control_status_label: Label
 var _keyboard_driver := KeyboardDriver.new()
@@ -205,14 +209,34 @@ func _setup_locomotive_materials() -> void:
 	var model_mount := lead.get_node_or_null("ModelMount") as Node3D if lead != null else null
 	if model_mount == null:
 		return
+	# The imported GLB marks these panels as green, but its inherited material
+	# state renders the large shell nearly white under the overcast environment.
+	# Use a clean material matching the passenger-car body instead.
+	var solid_body_green := StandardMaterial3D.new()
+	solid_body_green.resource_name = "HXD3D solid body green"
+	solid_body_green.albedo_color = Color(0.026, 0.245, 0.095, 1.0)
+	solid_body_green.roughness = 0.80
+	solid_body_green.metallic = 0.02
+	solid_body_green.metallic_specular = 0.25
 	var surface_count := 0
 	var adjusted_materials := {}
 	var textured_livery_materials := 0
+	var forced_green_panels := 0
 	for candidate in model_mount.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := candidate as MeshInstance3D
 		if mesh_instance == null or mesh_instance.mesh == null:
 			continue
+		var part_name := mesh_instance.name.to_lower()
+		var force_body_green := (part_name == "body_main_shell"
+			or part_name == "main_frame"
+			or part_name.contains("_side_2")
+			or part_name.contains("_side_3"))
 		for surface in range(mesh_instance.mesh.get_surface_count()):
+			if force_body_green:
+				mesh_instance.set_surface_override_material(surface, solid_body_green)
+				surface_count += 1
+				forced_green_panels += 1
+				continue
 			var source := mesh_instance.get_active_material(surface) as StandardMaterial3D
 			if source == null:
 				continue
@@ -236,17 +260,24 @@ func _setup_locomotive_materials() -> void:
 					continue
 				else:
 					material.albedo_color = _adjust_locomotive_color(
-						material.albedo_color, 1.28, 0.78)
-				material.roughness = minf(material.roughness, 0.38)
-				material.metallic = maxf(material.metallic, 0.18)
+						material.albedo_color, 1.38, 0.68)
+				# Painted bodywork is a rough dielectric surface, not polished
+				# metal. The previous values reflected the pale sky across it.
+				material.roughness = 0.80
+				material.metallic = 0.02
+				material.metallic_specular = 0.25
 			elif material_name.contains("glass"):
 				material.albedo_color = _adjust_locomotive_color(
 					material.albedo_color, 1.12, 0.72)
 				material.roughness = 0.10
-			elif material_name.contains("roof") or material_name.contains("steel"):
+			elif material_name.contains("roof"):
+				material.albedo_color = Color(0.56, 0.59, 0.57, 1.0)
+				material.roughness = 0.78
+				material.metallic = 0.18
+			elif material_name.contains("steel"):
 				material.albedo_color = _adjust_locomotive_color(
-					material.albedo_color, 1.05, 0.82)
-				material.roughness = maxf(material.roughness, 0.42)
+					material.albedo_color, 1.02, 0.72)
+				material.roughness = maxf(material.roughness, 0.58)
 			else:
 				material.albedo_color = _adjust_locomotive_color(
 					material.albedo_color, 1.08, 0.86)
@@ -255,15 +286,20 @@ func _setup_locomotive_materials() -> void:
 			surface_count += 1
 	print("BALLASTED_LOCOMOTIVE_MATERIAL_READY surfaces=", surface_count,
 		" unique_materials=", adjusted_materials.size(),
-		" textured_livery_materials=", textured_livery_materials)
+		" textured_livery_materials=", textured_livery_materials,
+		" forced_green_panels=", forced_green_panels)
 
 func _on_simulation_state(state: Dictionary) -> void:
 	if _input_source != "udp":
 		return
 	_target_stream_state = state.duplicate()
 	_last_stream_receive_usec = Time.get_ticks_usec()
+	var raw_mileage := float(state.get("mileage_m", route_profile.first_mileage_m))
+	if _udp_rebase_on_next_state:
+		_udp_mileage_offset_m = _udp_rebase_target_mileage_m - raw_mileage
+		_udp_rebase_on_next_state = false
 	if not _has_stream_state:
-		_display_mileage_m = float(state.get("mileage_m", route_profile.first_mileage_m))
+		_display_mileage_m = raw_mileage + _udp_mileage_offset_m
 		_has_stream_state = true
 	if _speed_chart != null:
 		_speed_chart.add_sample(float(state.get("t", 0.0)),
@@ -709,26 +745,29 @@ func _verges() -> void:
 	add_child(root)
 
 func _process(delta: float) -> void:
-	if _input_source == "keyboard":
-		_update_keyboard_control(delta)
-	elif _has_stream_state:
-		var packet_age_s := float(Time.get_ticks_usec() - _last_stream_receive_usec) / 1000000.0
-		var prediction_age_s := minf(packet_age_s, maximum_stream_prediction_s)
-		var target_mileage := float(_target_stream_state.get("mileage_m", _display_mileage_m))
-		var target_speed := float(_target_stream_state.get("speed_m_s", 0.0))
-		var predicted_mileage := target_mileage + target_speed * prediction_age_s
-		if absf(predicted_mileage - _display_mileage_m) >= stream_teleport_threshold_m:
-			_display_mileage_m = predicted_mileage
-		else:
-			# Preserve continuous physical motion between 1 kHz packets; only the
-			# small phase error is smoothed, so smoothing never replaces velocity.
-			if packet_age_s <= maximum_stream_prediction_s:
-				_display_mileage_m += target_speed * delta
-			var correction := 1.0 - exp(-delta / maxf(stream_smoothing_time_s, 0.001))
-			_display_mileage_m += (predicted_mileage - _display_mileage_m) * correction
-		var visual_state := _target_stream_state.duplicate()
-		visual_state["mileage_m"] = _display_mileage_m
-		_apply_visual_state(visual_state)
+	if not _train_paused:
+		if _input_source == "keyboard":
+			_update_keyboard_control(delta)
+		elif _has_stream_state:
+			var packet_age_s := float(Time.get_ticks_usec() - _last_stream_receive_usec) / 1000000.0
+			var prediction_age_s := minf(packet_age_s, maximum_stream_prediction_s)
+			var raw_fallback := _display_mileage_m - _udp_mileage_offset_m
+			var target_mileage := float(_target_stream_state.get(
+				"mileage_m", raw_fallback)) + _udp_mileage_offset_m
+			var target_speed := float(_target_stream_state.get("speed_m_s", 0.0))
+			var predicted_mileage := target_mileage + target_speed * prediction_age_s
+			if absf(predicted_mileage - _display_mileage_m) >= stream_teleport_threshold_m:
+				_display_mileage_m = predicted_mileage
+			else:
+				# Preserve continuous physical motion between 1 kHz packets; only the
+				# small phase error is smoothed, so smoothing never replaces velocity.
+				if packet_age_s <= maximum_stream_prediction_s:
+					_display_mileage_m += target_speed * delta
+				var correction := 1.0 - exp(-delta / maxf(stream_smoothing_time_s, 0.001))
+				_display_mileage_m += (predicted_mileage - _display_mileage_m) * correction
+			var visual_state := _target_stream_state.duplicate()
+			visual_state["mileage_m"] = _display_mileage_m
+			_apply_visual_state(visual_state)
 	if _camera == null:
 		return
 	if _input_source != "keyboard":
@@ -738,6 +777,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var key_event := event as InputEventKey
 		if key_event.pressed and not key_event.echo:
+			if key_event.keycode == KEY_SPACE:
+				_toggle_train_pause()
+				get_viewport().set_input_as_handled()
+				return
 			if key_event.keycode == KEY_C or key_event.keycode == KEY_6:
 				_cab_view_enabled = not _cab_view_enabled
 				if _speed_chart != null:
@@ -751,7 +794,86 @@ func _unhandled_input(event: InputEvent) -> void:
 					_speed_chart.visible = not _speed_chart.visible
 				get_viewport().set_input_as_handled()
 				return
+			if key_event.keycode == KEY_R:
+				_restart_train_from_route_start()
+				get_viewport().set_input_as_handled()
+				return
 	super._unhandled_input(event)
+
+
+func _restart_train_from_route_start() -> void:
+	var start_mileage: float = route_profile.first_mileage_m
+	var continuing_speed := 0.0
+	var was_paused := _train_paused
+	_train_paused = false
+	if _input_source == "keyboard":
+		continuing_speed = _keyboard_driver.speed_mps
+		if continuing_speed <= 0.01:
+			continuing_speed = KeyboardDriver.INITIAL_SPEED_MPS
+		_keyboard_driver.mileage_m = start_mileage
+		_keyboard_driver.speed_mps = continuing_speed
+		_keyboard_driver.time_s = 0.0
+		_keyboard_driver.control_status = "COASTING"
+		_keyboard_initialized = true
+	else:
+		continuing_speed = float(_target_stream_state.get("speed_m_s", 0.0))
+		if _has_stream_state and not was_paused:
+			var raw_mileage := float(_target_stream_state.get(
+				"mileage_m", start_mileage))
+			_udp_mileage_offset_m = start_mileage - raw_mileage
+			_udp_rebase_on_next_state = false
+		else:
+			_udp_mileage_offset_m = 0.0
+			_udp_rebase_target_mileage_m = start_mileage
+			_udp_rebase_on_next_state = true
+		if was_paused and simulation_stream != null:
+			simulation_stream.set_input_enabled(true)
+	_display_mileage_m = start_mileage
+	_latest_mileage_m = start_mileage
+	if simulation_stream != null:
+		simulation_stream.set_preview_speed(continuing_speed)
+	if _speed_chart != null:
+		_speed_chart.reset_history()
+		_speed_chart.add_sample(0.0, continuing_speed)
+	_apply_visual_state({
+		"schema": "keyboard" if _input_source == "keyboard" else "railway_ltd.v1",
+		"mileage_m": start_mileage,
+		"speed_m_s": continuing_speed,
+		"seq": int(_target_stream_state.get("seq", -1)),
+	})
+	print("BALLASTED_TRAIN_RESTART source=", _input_source,
+		" mileage=", start_mileage, " speed_m_s=", continuing_speed)
+
+
+func _toggle_train_pause() -> void:
+	_train_paused = not _train_paused
+	var preserved_speed := (_keyboard_driver.speed_mps if _input_source == "keyboard"
+		else float(_target_stream_state.get("speed_m_s", 0.0)))
+	if _input_source == "udp" and simulation_stream != null:
+		if _train_paused:
+			simulation_stream.set_input_enabled(false)
+		else:
+			_udp_rebase_target_mileage_m = _display_mileage_m
+			_udp_rebase_on_next_state = true
+			simulation_stream.set_input_enabled(true)
+	if simulation_stream != null:
+		simulation_stream.set_preview_speed(0.0 if _train_paused else preserved_speed)
+	if _input_source == "keyboard":
+		_keyboard_driver.control_status = "PAUSED" if _train_paused else (
+			"COASTING" if preserved_speed > 0.0 else "STOPPED")
+	var displayed_speed := 0.0 if _train_paused else preserved_speed
+	_apply_visual_state({
+		"schema": "keyboard" if _input_source == "keyboard" else "railway_ltd.v1",
+		"mileage_m": _display_mileage_m,
+		"speed_m_s": displayed_speed,
+		"seq": int(_target_stream_state.get("seq", -1)),
+	})
+	if _speed_chart != null:
+		var sample_time := (_keyboard_driver.time_s if _input_source == "keyboard"
+			else float(_target_stream_state.get("t", 0.0)))
+		_speed_chart.add_sample(sample_time, displayed_speed)
+	print("BALLASTED_TRAIN_PAUSE ", "PAUSED" if _train_paused else "RUNNING",
+		" source=", _input_source, " mileage=", _display_mileage_m)
 
 
 func _finish_smoke_test() -> void:
@@ -779,6 +901,56 @@ func _finish_smoke_test() -> void:
 	ok = ok and train_root != null and train_root.get_child_count() == COACH_COUNT + 1
 	ok = ok and type_counts.YZ25T == 8 and type_counts.CA25T == 1
 	ok = ok and type_counts.RW25T == 1 and type_counts.YW25T == 8
+	# R-key restart semantics: keyboard keeps motion, UDP rebases the live
+	# mileage so subsequent packets continue forward from the route start.
+	_input_source = "keyboard"
+	_keyboard_driver.mileage_m = route_profile.first_mileage_m + 600.0
+	_keyboard_driver.speed_mps = 12.5
+	_restart_train_from_route_start()
+	ok = ok and is_equal_approx(_keyboard_driver.mileage_m,
+		route_profile.first_mileage_m)
+	ok = ok and is_equal_approx(_keyboard_driver.speed_mps, 12.5)
+	_input_source = "udp"
+	_has_stream_state = true
+	_target_stream_state = {
+		"mileage_m": route_profile.first_mileage_m + 1200.0,
+		"speed_m_s": 15.0,
+		"seq": 99,
+	}
+	_restart_train_from_route_start()
+	ok = ok and is_equal_approx(_display_mileage_m,
+		route_profile.first_mileage_m)
+	ok = ok and is_equal_approx(_udp_mileage_offset_m, -1200.0)
+	# Space-key pause semantics: mileage freezes, speed is preserved, and UDP
+	# resumes against the frozen visual position instead of jumping forward.
+	_input_source = "keyboard"
+	_keyboard_driver.mileage_m = route_profile.first_mileage_m + 300.0
+	_keyboard_driver.speed_mps = 10.0
+	_display_mileage_m = _keyboard_driver.mileage_m
+	_toggle_train_pause()
+	var paused_mileage := _display_mileage_m
+	_process(0.5)
+	ok = ok and _train_paused
+	ok = ok and is_equal_approx(_display_mileage_m, paused_mileage)
+	ok = ok and is_equal_approx(_keyboard_driver.speed_mps, 10.0)
+	_toggle_train_pause()
+	_process(0.1)
+	ok = ok and not _train_paused and _display_mileage_m > paused_mileage
+	_input_source = "udp"
+	_has_stream_state = true
+	_display_mileage_m = route_profile.first_mileage_m + 450.0
+	_target_stream_state = {
+		"mileage_m": route_profile.first_mileage_m + 1800.0,
+		"speed_m_s": 16.0,
+		"seq": 100,
+	}
+	_toggle_train_pause()
+	ok = ok and _train_paused and not simulation_stream.input_enabled
+	_toggle_train_pause()
+	ok = ok and not _train_paused and simulation_stream.input_enabled
+	ok = ok and _udp_rebase_on_next_state
+	ok = ok and is_equal_approx(_udp_rebase_target_mileage_m,
+		_display_mileage_m)
 	print("BALLASTED_ROUTE_SMOKE ", "PASS" if ok else "FAIL",
 		" route_samples=", route_profile.sample_count(), " rail_segments=", _rail_segment_count,
 		" sleepers=", _route_sleeper_count, " stones=", stone_count,
@@ -831,6 +1003,9 @@ func _setup_input_controls() -> void:
 		var help := Label.new()
 		help.text = "W: 按住牵引前进   S: 按住制动\n松开: 惰行   W+S: 制动优先\nC / 6: 司机室   V: 速度曲线"
 		box.add_child(help)
+		var restart_help := Label.new()
+		restart_help.text = "R: Restart from start   Space: Pause / Resume"
+		box.add_child(restart_help)
 		layer.add_child(panel)
 	var source := str(plan.get("input_source", "udp"))
 	for argument in OS.get_cmdline_user_args():
@@ -846,6 +1021,10 @@ func _set_input_source(source: String) -> void:
 	if _input_source == "udp" and _has_stream_state and Time.get_ticks_usec() - _last_stream_receive_usec < 1000000:
 		previous_speed = float(_target_stream_state.get("speed_m_s", 0.0))
 	_input_source = "keyboard" if source == "keyboard" else "udp"
+	if _input_source == "udp":
+		_udp_mileage_offset_m = 0.0
+		_udp_rebase_on_next_state = false
+	_train_paused = false
 	simulation_stream.set_input_enabled(_input_source == "udp")
 	_has_stream_state = false
 	_target_stream_state.clear()
@@ -891,6 +1070,8 @@ func _update_control_status(speed_mps: float) -> void:
 	if _control_status_label == null:
 		return
 	var status := _keyboard_driver.control_status if _input_source == "keyboard" else ("UDP LIVE" if _has_stream_state else "WAITING FOR UDP")
+	if _train_paused:
+		status = "PAUSED"
 	if _input_source == "udp" and _has_stream_state and Time.get_ticks_usec() - _last_stream_receive_usec > 1000000:
-		status = "UDP STALE"
+		status = "PAUSED" if _train_paused else "UDP STALE"
 	_control_status_label.text = "%s  |  %.1f km/h  |  Limit %.0f km/h" % [status, speed_mps * 3.6, _keyboard_driver.maximum_speed_mps * 3.6]

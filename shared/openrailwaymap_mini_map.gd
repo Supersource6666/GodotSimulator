@@ -2,7 +2,7 @@ extends PanelContainer
 ## OpenRailwayMap view of railway route 0001 through the south Zhengzhou hub.
 
 const Overlay = preload("res://shared/openrailwaymap_overlay.gd")
-const MAP_SIZE := Vector2(344.0, 244.0)
+const MAP_SIZE := Vector2(288.0, 204.0)
 const TILE_SIZE := 256.0
 const MAP_ZOOM := 9
 const MAP_CENTER := Vector2(113.704, 34.522)
@@ -32,8 +32,8 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	name = "OpenRailwayMapMiniMap"
-	position = Vector2(18.0, 18.0)
-	custom_minimum_size = Vector2(368.0, 326.0)
+	position = Vector2(14.0, 14.0)
+	custom_minimum_size = Vector2(312.0, 284.0)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.025, 0.045, 0.055, 0.94)
@@ -51,7 +51,7 @@ func _build_ui() -> void:
 	add_child(column)
 	var title := Label.new()
 	title.text = "线路小地图  ·  郑州枢纽南段"
-	title.add_theme_font_size_override("font_size", 17)
+	title.add_theme_font_size_override("font_size", 15)
 	title.add_theme_color_override("font_color", Color("f3f8fa"))
 	column.add_child(title)
 
@@ -77,12 +77,12 @@ func _build_ui() -> void:
 
 	_status = Label.new()
 	_status.text = "正在加载 OpenRailwayMap…"
-	_status.add_theme_font_size_override("font_size", 11)
+	_status.add_theme_font_size_override("font_size", 10)
 	_status.add_theme_color_override("font_color", Color("b9c7cc"))
 	column.add_child(_status)
 	var attribution := Label.new()
 	attribution.text = "© OpenStreetMap contributors · OpenRailwayMap CC-BY-SA 2.0"
-	attribution.add_theme_font_size_override("font_size", 10)
+	attribution.add_theme_font_size_override("font_size", 9)
 	attribution.add_theme_color_override("font_color", Color("91a3aa"))
 	column.add_child(attribution)
 
