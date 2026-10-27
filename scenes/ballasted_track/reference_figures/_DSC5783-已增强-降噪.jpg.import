@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c7jv4gsdsp6dd"
-path="res://.godot/imported/LeftInnerSensor.png-afa4ff5fbbb9c8b02ff5183c3fe372ba.ctex"
+uid="uid://cg76maoysoivp"
+path="res://.godot/imported/_DSC5783-已增强-降噪.jpg-1d208a4a0e8b403bd3f52e5422f4dc42.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://scenes/track_side/captures/laser_off/LeftInnerSensor.png"
-dest_files=["res://.godot/imported/LeftInnerSensor.png-afa4ff5fbbb9c8b02ff5183c3fe372ba.ctex"]
+source_file="res://scenes/ballasted_track/reference_figures/_DSC5783-已增强-降噪.jpg"
+dest_files=["res://.godot/imported/_DSC5783-已增强-降噪.jpg-1d208a4a0e8b403bd3f52e5422f4dc42.ctex"]
 
 [params]
 

@@ -12,6 +12,7 @@ const TrainCarScene = preload("res://scenes/ballasted_track/train/train_car.tscn
 const WaggonScene = preload("res://scenes/ballasted_track/train/models/HXD3D_waggon.glb")
 const KeyboardDriver = preload("res://scenes/ballasted_track/keyboard_train_driver.gd")
 const SpeedChart = preload("res://scenes/ballasted_track/speed_chart.gd")
+const PredictionHud = preload("res://scenes/ballasted_track/ddpm_prediction_hud.gd")
 const OpenRailwayMapMiniMap = preload("res://shared/openrailwaymap_mini_map.gd")
 
 const PROFILE_PATH := "res://scenes/ballasted_track/data/ping_duan_mian.csv"
@@ -37,6 +38,15 @@ const RAIL_INSTANCES_PER_CHUNK := 160
 const SLEEPER_INSTANCES_PER_CHUNK := 400
 
 @export var follow_realtime_train := true
+@export_group("Trackside landscape")
+@export var landscape_enabled := true
+@export var summer_daylight := true
+@export_range(0.25, 2.0, 0.25) var landscape_density := 1.0
+@export_range(180.0, 700.0, 20.0) var landscape_view_distance_m := 420.0
+## Optional mesh resources: metres, Y up, origin at the trunk base, materials included.
+@export var landscape_tree_mesh: Mesh
+@export var landscape_shrub_mesh: Mesh
+@export_group("Train camera")
 @export_range(15.0, 150.0, 1.0) var follow_camera_lead_distance_m := 48.0
 @export_range(0.0, 200.0, 1.0) var follow_camera_focus_behind_lead_m := 55.0
 @export_range(0.0, 40.0, 1.0) var follow_camera_lateral_m := 12.0
@@ -66,6 +76,7 @@ var _target_stream_state: Dictionary = {}
 var _shutdown_requested := false
 var _cab_view_enabled := false
 var _speed_chart
+var _prediction_hud
 var _mini_map
 var _input_source := "udp"
 var _keyboard_initialized := false
@@ -94,6 +105,7 @@ func _ready() -> void:
 	super._ready()
 	_setup_mini_map()
 	_setup_speed_panel()
+	_setup_prediction_hud()
 	_setup_locomotive_materials()
 	_setup_waggon_livery()
 	_setup_pantograph()
@@ -119,6 +131,21 @@ func _setup_speed_panel() -> void:
 	_speed_chart.offset_right = -20.0
 	_speed_chart.offset_bottom = -20.0
 	layer.add_child(_speed_chart)
+
+
+func _setup_prediction_hud() -> void:
+	# Bottom-left: the speed chart is bottom-right and the console top-right.
+	var layer := get_node_or_null("SceneInterface") as CanvasLayer
+	if layer == null:
+		return
+	_prediction_hud = PredictionHud.new()
+	_prediction_hud.name = "DdpmPredictionHud"
+	_prediction_hud.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_prediction_hud.offset_left = 20.0
+	_prediction_hud.offset_top = -190.0
+	_prediction_hud.offset_right = 470.0
+	_prediction_hud.offset_bottom = -20.0
+	layer.add_child(_prediction_hud)
 
 
 func _setup_mini_map() -> void:
@@ -304,6 +331,8 @@ func _on_simulation_state(state: Dictionary) -> void:
 	if _speed_chart != null:
 		_speed_chart.add_sample(float(state.get("t", 0.0)),
 			float(state.get("speed_m_s", 0.0)))
+	if _prediction_hud != null:
+		_prediction_hud.update_prediction(state.get("prediction", {}) as Dictionary)
 
 
 func _update_cab_camera(train_root: Node3D) -> void:
@@ -740,9 +769,30 @@ func _setup_pantograph() -> void:
 		" raised_height=", _pantograph.raised_height)
 
 func _verges() -> void:
-	var root := Node3D.new()
+	if summer_daylight:
+		var env: Environment = get_node("ClearSkyEnvironment").environment
+		var sky := ProceduralSkyMaterial.new()
+		sky.sky_top_color = Color("5387b4")
+		sky.sky_horizon_color = Color("ccd9dc")
+		sky.ground_horizon_color = Color("9ba88a")
+		sky.ground_bottom_color = Color("485439")
+		env.sky.sky_material = sky
+		env.ambient_light_color = Color("c4d5e4")
+		env.ambient_light_energy = 0.65
+		env.fog_density = 0.00035
+		var sun: DirectionalLight3D = get_node("Sunlight")
+		sun.light_color = Color("fff4dc")
+		sun.light_energy = 1.25
+		sun.light_angular_distance = 0.8
+		sun.directional_shadow_max_distance = 180.0
+	if not landscape_enabled:
+		return
+	var root := preload("res://scenes/ballasted_track/route_landscape.gd").new()
 	root.name = "NaturalRailwayVerges"
+	root.density = landscape_density
+	root.view_distance = landscape_view_distance_m
 	add_child(root)
+	root.configure(route_profile, landscape_tree_mesh, landscape_shrub_mesh)
 
 func _process(delta: float) -> void:
 	if not _train_paused:
@@ -880,6 +930,14 @@ func _finish_smoke_test() -> void:
 	await get_tree().process_frame
 	var curve_pose: Transform3D = route_profile.pose_at_distance(2000.0)
 	var ok: bool = _route_error.is_empty() and route_profile.sample_count() > 30000
+	if landscape_enabled:
+		var landscape := get_node_or_null("NaturalRailwayVerges")
+		ok = ok and landscape != null
+		if landscape != null:
+			landscape.refresh(curve_pose.origin, 32)
+			ok = ok and landscape.chunks.size() > 0 and landscape.chunks.size() < 24
+			landscape.refresh(route_profile.pose_at_distance(0.0).origin, 32)
+			ok = ok and landscape.chunks.size() > 0 and landscape.chunks.size() < 24
 	ok = ok and _rail_segment_count > 15000 and _route_sleeper_count > 25000
 	ok = ok and stone_count > 80000
 	ok = ok and absf(curve_pose.origin.x) > 1.0

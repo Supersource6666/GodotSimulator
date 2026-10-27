@@ -1,6 +1,6 @@
 # Godot 4 editor/import cache. Keep source-side *.import and *.uid files tracked.
-/.godot/
-/.mono/
+.godot/
+.mono/
 *.translation
 # Godot shader caches created by some renderer/driver configurations.
 /shader_cache/
@@ -34,10 +34,17 @@ export_credentials.cfg
 # Local credentials and environment overrides.
 /cesium_token.txt
 /google_maps_api_key.txt
-/.env
-/.env.*
-!/.env.example
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
 *.pem
+# Public CA bundle used by the offline download tools, not a private key.
+!/tools/cacert.pem
+*.key
+*.p12
+*.pfx
 
 # Runtime state, logs, dumps and generated output.
 /appdata/
@@ -70,6 +77,13 @@ mono_crash.*
 /scenes/travel/preview.png.import
 /scenes/travel/track_detail.png
 /scenes/travel/track_detail.png.import
+/scenes/travel/pantograph_detail.png
+/scenes/travel/pantograph_detail.png.import
+/scenes/ballasted_track/landscape_preview.png
+/scenes/ballasted_track/landscape_preview.png.import
+/scenes/ballasted_track/detail.png
+/scenes/ballasted_track/detail.png.import
+# Keep scene-menu covers (preview.png), authored textures and reference_figures.
 
 # Large offline map/model sources are distributed separately.
 # Keep manifests, scripts and offline_data/dynamic_data tracked.
@@ -83,17 +97,17 @@ mono_crash.*
 .coverage.*
 /htmlcov/
 /coverage.xml
-/.pytest_cache/
-/.mypy_cache/
-/.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 **/__pycache__/
 .ipynb_checkpoints/
 *.py[cod]
-/node_modules/
+node_modules/
 *.tsbuildinfo
 
 # Python virtual environments and local packaging/test environments.
-/.venv/
+.venv/
 /venv/
 /env/
 /.tox/
@@ -112,6 +126,10 @@ mono_crash.*
 *.sln.docstates
 *.swp
 *.swo
+# Godot/editor recovery files; source *.uid and *.import must remain tracked.
+*.godot.tmp
+*.tscn.tmp
+*.tres.tmp
 
 # Operating-system metadata.
 .DS_Store

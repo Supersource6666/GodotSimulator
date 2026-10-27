@@ -22,6 +22,8 @@ boot_splash/show_image=false
 
 [autoload]
 
+DDPMPrediction="*res://shared/ddpm_prediction_receiver.gd"
+
 DispatchContext="*res://app/dispatch_context.gd"
 
 [display]

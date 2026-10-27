@@ -251,6 +251,10 @@ func _finish_smoke_test() -> void:
 	get_tree().quit(0 if ok else 1)
 
 func _capture_reference() -> void:
+	if "--landscape-capture" in OS.get_cmdline_user_args():
+		_camera.position = Vector3(22, 15, 55)
+		_camera.look_at(Vector3(-4, 2, -40))
+		get_node("SceneInterface").hide()
 	if "--detail-capture" in OS.get_cmdline_user_args():
 		_camera.position = Vector3(1.8,0.87,12)
 		_camera.rotation_degrees = Vector3(-30,35,0)
@@ -261,6 +265,7 @@ func _capture_reference() -> void:
 	var file := "detail.png" if "--detail-capture" in OS.get_cmdline_user_args() else "preview.png"
 	if "--hardware-capture" in OS.get_cmdline_user_args(): file = "fastening_detail.png"
 	if "--ly-capture" in OS.get_cmdline_user_args(): file = "ly_preview.png"
+	if "--landscape-capture" in OS.get_cmdline_user_args(): file = "landscape_preview.png"
 	var error := get_viewport().get_texture().get_image().save_png("res://scenes/ballasted_track/"+file)
 	print("BALLASTED_CAPTURE ",error_string(error))
 	get_tree().quit(0 if error==OK else 1)

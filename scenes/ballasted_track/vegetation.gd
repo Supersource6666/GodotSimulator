@@ -3,13 +3,15 @@ extends Node3D
 const Batch = preload("res://assets/procedural/detail_batch.gd")
 var rng := RandomNumberGenerator.new()
 var plant_count := 0
+var leaf_density := 1.0
+var summer_palette := false
 
 func _material(color: Color, leaves: bool = false) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
 	m.roughness = 0.95
 	if leaves:
-		m.albedo_color = Color("6e7b5c")
+		m.albedo_color = Color("80916b") if summer_palette else Color("6e7b5c")
 		m.vertex_color_use_as_albedo = true
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 		m.backlight_enabled = true
@@ -58,15 +60,18 @@ func _plant_mesh(variant: int) -> ArrayMesh:
 	var foliage := SurfaceTool.new()
 	foliage.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var greens := [Color("334523"),Color("3e512c"),Color("2a3c24"),Color("48562c"),Color("38482b")]
+	if summer_palette:
+		greens = [Color("527b25"), Color("6b9031"), Color("365c22"), Color("78983b"), Color("476f28")]
 	for center in clusters:
 		var cluster_size := crown*rng.randf_range(0.43,0.66)
-		for i in range(480 if tall else 180):
+		for i in range(maxi(24, int((480 if tall else 180) * leaf_density))):
 			var dir := Vector3(rng.randf_range(-1,1),rng.randf_range(-1,1),rng.randf_range(-1,1))
 			if dir.length_squared()>1: dir = dir.normalized()*rng.randf_range(0.5,1.0)
 			var p := center+dir*Vector3(cluster_size,cluster_size*0.65,cluster_size)
 			var shade: Color = greens[(variant+i%2)%greens.size()]
 			shade = shade.darkened(rng.randf_range(0.0,0.24))
-			_leaf(foliage,p,rng.randf_range(0.10,0.18) if tall else rng.randf_range(0.055,0.105),shade)
+			var leaf_size := rng.randf_range(0.10,0.18) if tall else rng.randf_range(0.055,0.105)
+			_leaf(foliage,p,leaf_size / sqrt(leaf_density),shade)
 	foliage.set_material(_material(Color.WHITE,true))
 	foliage.commit(mesh)
 	return mesh
