@@ -110,6 +110,7 @@ func _ready() -> void:
 	_setup_waggon_livery()
 	_setup_pantograph()
 	_setup_realtime_stream()
+	preload("res://scenes/ballasted_track/scene_hmi.gd").new().configure(self, get_node("SceneInterface"))
 
 
 func _setup_realtime_stream() -> void:
@@ -216,6 +217,7 @@ func _setup_waggon_livery() -> void:
 			continue
 		var material := ShaderMaterial.new()
 		material.shader = WaggonLivery
+		material.set_shader_parameter("car_variation", sin(float(coach.get_meta("coach_number")) * 2.399) * 0.035)
 		var model_mount := coach.get_node_or_null("ModelMount") as Node3D
 		for candidate in model_mount.find_children("*", "MeshInstance3D", true, false):
 			var mesh_instance := candidate as MeshInstance3D
@@ -236,39 +238,44 @@ func _setup_locomotive_materials() -> void:
 	var model_mount := lead.get_node_or_null("ModelMount") as Node3D if lead != null else null
 	if model_mount == null:
 		return
-	# The imported GLB marks these panels as green, but its inherited material
-	# state renders the large shell nearly white under the overcast environment.
-	# Use a clean material matching the passenger-car body instead.
-	var solid_body_green := StandardMaterial3D.new()
-	solid_body_green.resource_name = "HXD3D solid body green"
-	solid_body_green.albedo_color = Color(0.026, 0.245, 0.095, 1.0)
-	solid_body_green.roughness = 0.80
-	solid_body_green.metallic = 0.02
-	solid_body_green.metallic_specular = 0.25
+	# Reference HXD3D: red enamel, charcoal cab band and blue-grey skirt.
 	var surface_count := 0
 	var adjusted_materials := {}
 	var textured_livery_materials := 0
-	var forced_green_panels := 0
+	var forced_red_panels := 0
 	for candidate in model_mount.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := candidate as MeshInstance3D
 		if mesh_instance == null or mesh_instance.mesh == null:
 			continue
 		var part_name := mesh_instance.name.to_lower()
-		var force_body_green := (part_name == "body_main_shell"
+		var body_transform := lead.global_transform.affine_inverse() * mesh_instance.global_transform
+		var force_body_red := (part_name == "body_main_shell"
 			or part_name == "main_frame"
 			or part_name.contains("_side_2")
 			or part_name.contains("_side_3"))
 		for surface in range(mesh_instance.mesh.get_surface_count()):
-			if force_body_green:
-				mesh_instance.set_surface_override_material(surface, solid_body_green)
+			if force_body_red:
+				var shell := ShaderMaterial.new()
+				shell.shader = LocomotiveLivery
+				shell.set_shader_parameter("use_texture", false)
+				shell.set_shader_parameter("mesh_to_body", body_transform)
+				mesh_instance.set_surface_override_material(surface, shell)
 				surface_count += 1
-				forced_green_panels += 1
+				forced_red_panels += 1
 				continue
 			var source := mesh_instance.get_active_material(surface) as StandardMaterial3D
 			if source == null:
 				continue
 			var source_id := source.get_instance_id()
-			if adjusted_materials.has(source_id):
+			if part_name.contains("window_frame"):
+				var frame := StandardMaterial3D.new()
+				frame.albedo_color = Color("424a4b")
+				frame.roughness = 0.62
+				frame.metallic = 0.18
+				mesh_instance.set_surface_override_material(surface, frame)
+				surface_count += 1
+				continue
+			if adjusted_materials.has(source_id) and not (adjusted_materials[source_id] is ShaderMaterial):
 				mesh_instance.set_surface_override_material(surface,
 					adjusted_materials[source_id])
 				surface_count += 1
@@ -280,27 +287,42 @@ func _setup_locomotive_materials() -> void:
 					var livery := ShaderMaterial.new()
 					livery.shader = LocomotiveLivery
 					livery.set_shader_parameter("albedo_texture", material.albedo_texture)
+					livery.set_shader_parameter("mesh_to_body", body_transform)
 					textured_livery_materials += 1
 					adjusted_materials[source_id] = livery
 					mesh_instance.set_surface_override_material(surface, livery)
 					surface_count += 1
 					continue
 				else:
-					material.albedo_color = _adjust_locomotive_color(
-						material.albedo_color, 1.38, 0.68)
-				# Painted bodywork is a rough dielectric surface, not polished
-				# metal. The previous values reflected the pale sky across it.
-				material.roughness = 0.80
-				material.metallic = 0.02
-				material.metallic_specular = 0.25
+					var paint := ShaderMaterial.new()
+					paint.shader = LocomotiveLivery
+					paint.set_shader_parameter("use_texture", false)
+					paint.set_shader_parameter("mesh_to_body", body_transform)
+					mesh_instance.set_surface_override_material(surface, paint)
+					adjusted_materials[source_id] = paint
+					surface_count += 1
+					continue
 			elif material_name.contains("glass"):
-				material.albedo_color = _adjust_locomotive_color(
-					material.albedo_color, 1.12, 0.72)
-				material.roughness = 0.10
+				material.albedo_color = Color("16343b")
+				material.roughness = 0.27
+				material.metallic = 0.0
+				material.metallic_specular = 0.30
 			elif material_name.contains("roof"):
-				material.albedo_color = Color(0.56, 0.59, 0.57, 1.0)
+				material.albedo_color = Color("333b40")
 				material.roughness = 0.78
 				material.metallic = 0.18
+			elif material_name.contains("underframe"):
+				material.albedo_color = Color("293e47")
+				material.roughness = 0.76
+			elif material_name.contains("running gear"):
+				material.albedo_color = Color("333735")
+				material.roughness = 0.88
+			elif material_name.contains("wheel centres"):
+				material.albedo_color = Color("393732")
+				material.roughness = 0.86
+			elif material_name.contains("ivory"):
+				material.albedo_color = Color("b21a2c")
+				material.roughness = 0.60
 			elif material_name.contains("steel"):
 				material.albedo_color = _adjust_locomotive_color(
 					material.albedo_color, 1.02, 0.72)
@@ -314,7 +336,66 @@ func _setup_locomotive_materials() -> void:
 	print("BALLASTED_LOCOMOTIVE_MATERIAL_READY surfaces=", surface_count,
 		" unique_materials=", adjusted_materials.size(),
 		" textured_livery_materials=", textured_livery_materials,
-		" forced_green_panels=", forced_green_panels)
+		" forced_red_panels=", forced_red_panels)
+
+func _capture_reference() -> void:
+	if "--cover-capture" in OS.get_cmdline_user_args():
+		_capture_cover.call_deferred()
+		return
+	if "--locomotive-capture" not in OS.get_cmdline_user_args():
+		super._capture_reference()
+		return
+	_apply_visual_state({"mileage_m": route_profile.first_mileage_m + 150.0, "speed_m_s": 0.0})
+	var lead := get_node("Train/LeadCar") as Node3D
+	_camera.global_position = lead.global_transform * Vector3(14.0, 4.0, -17.0)
+	_camera.look_at(lead.global_transform * Vector3(0.0, 0.8, -2.0))
+	get_node("SceneInterface").hide()
+	for i in range(16):
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var error := get_viewport().get_texture().get_image().save_png("res://scenes/ballasted_track/locomotive_preview.png")
+	print("LOCOMOTIVE_CAPTURE ", error_string(error))
+	get_tree().quit(0 if error == OK else 1)
+
+func _capture_cover() -> void:
+	_train_paused = true
+	_apply_visual_state({"mileage_m": route_profile.first_mileage_m + 260.0, "speed_m_s": 0.0})
+	var lead := get_node("Train/LeadCar") as Node3D
+	_camera.global_position = lead.global_transform * Vector3(14.0, 4.3, -34.0)
+	_camera.look_at(lead.global_transform * Vector3(0.0, 0.8, 0.0))
+	_camera.fov = 50.0
+	var environment: Environment = get_node("ClearSkyEnvironment").environment
+	environment.ambient_light_energy = 0.38
+	environment.fog_density = 0.0008
+	var sun: DirectionalLight3D = get_node("Sunlight")
+	sun.light_color = Color("fff1df")
+	sun.light_energy = 1.15
+	sun.light_angular_distance = 1.2
+	sun.directional_shadow_max_distance = 230.0
+	get_node("SceneInterface").hide()
+	var landscape := get_node("NaturalRailwayVerges")
+	landscape.refresh(_camera.global_position, 32)
+	var capture := SubViewport.new()
+	var high_resolution := "--cover-highres" in OS.get_cmdline_user_args()
+	capture.size = Vector2i(2400, 3200) if high_resolution else Vector2i(1200, 1600)
+	capture.world_3d = get_world_3d()
+	capture.msaa_3d = Viewport.MSAA_4X
+	capture.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	add_child(capture)
+	var camera := Camera3D.new()
+	capture.add_child(camera)
+	camera.global_transform = _camera.global_transform
+	camera.fov = 50.0
+	camera.current = true
+	for i in range(4):
+		await get_tree().process_frame
+	capture.render_target_update_mode = SubViewport.UPDATE_ONCE
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var file := "res://scenes/ballasted_track/journal_cover.png" if high_resolution else "res://scenes/ballasted_track/journal_cover_preview.png"
+	var error := capture.get_texture().get_image().save_png(file)
+	print("JOURNAL_COVER_CAPTURE ", error_string(error), " size=", capture.size)
+	get_tree().quit(0 if error == OK else 1)
 
 func _on_simulation_state(state: Dictionary) -> void:
 	if _input_source != "udp":
@@ -772,18 +853,20 @@ func _verges() -> void:
 	if summer_daylight:
 		var env: Environment = get_node("ClearSkyEnvironment").environment
 		var sky := ProceduralSkyMaterial.new()
-		sky.sky_top_color = Color("5387b4")
-		sky.sky_horizon_color = Color("ccd9dc")
-		sky.ground_horizon_color = Color("9ba88a")
-		sky.ground_bottom_color = Color("485439")
+		sky.sky_top_color = Color("8899a3")
+		sky.sky_horizon_color = Color("c7cbc8")
+		sky.ground_horizon_color = Color("a3a592")
+		sky.ground_bottom_color = Color("57594c")
 		env.sky.sky_material = sky
-		env.ambient_light_color = Color("c4d5e4")
-		env.ambient_light_energy = 0.65
-		env.fog_density = 0.00035
+		env.ambient_light_color = Color("c5c9c7")
+		env.ambient_light_energy = 0.48
+		env.fog_density = 0.0011
+		env.fog_light_color = Color("bfc5c4")
+		env.fog_sky_affect = 0.35
 		var sun: DirectionalLight3D = get_node("Sunlight")
 		sun.light_color = Color("fff4dc")
-		sun.light_energy = 1.25
-		sun.light_angular_distance = 0.8
+		sun.light_energy = 0.95
+		sun.light_angular_distance = 2.2
 		sun.directional_shadow_max_distance = 180.0
 	if not landscape_enabled:
 		return
@@ -1132,4 +1215,6 @@ func _update_control_status(speed_mps: float) -> void:
 		status = "PAUSED"
 	if _input_source == "udp" and _has_stream_state and Time.get_ticks_usec() - _last_stream_receive_usec > 1000000:
 		status = "PAUSED" if _train_paused else "UDP STALE"
-	_control_status_label.text = "%s  |  %.1f km/h  |  Limit %.0f km/h" % [status, speed_mps * 3.6, _keyboard_driver.maximum_speed_mps * 3.6]
+	var captions := {"WAITING FOR UDP": "等待外部仿真数据", "UDP LIVE": "外部数据在线", "UDP STALE": "外部数据超时", "PAUSED": "运行已暂停", "COASTING": "惰行", "STOPPED": "停车", "TRACTION": "牵引", "BRAKING": "制动"}
+	_control_status_label.text = "%s\n限速 %.0f km/h" % [captions.get(status, status), _keyboard_driver.maximum_speed_mps * 3.6]
+	_control_status_label.add_theme_color_override("font_color", Color("e9b45c") if status in ["WAITING FOR UDP", "UDP STALE", "PAUSED"] else Color("65c6cd"))

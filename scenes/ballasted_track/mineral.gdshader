@@ -11,7 +11,24 @@ float noise(vec3 p){
 void vertex(){world=(MODEL_MATRIX*vec4(VERTEX,1)).xyz;tint=COLOR;}
 void fragment(){
  float grain=noise(world*grain_scale);
- ALBEDO=stone_color.rgb*tint.rgb*(0.65+0.65*grain+0.25*noise(world*23.0))+vec3(smoothstep(0.67,0.83,grain)*0.07);
+ // Irregular aggregate cells keep the formation continuous between detail stones.
+ vec2 cell=world.xz*19.0;
+ vec2 base=floor(cell);
+ float nearest=2.0;
+ float second=2.0;
+ float mineral=0.0;
+ for(int x=-1;x<=1;x++){
+  for(int y=-1;y<=1;y++){
+   vec2 id=base+vec2(float(x),float(y));
+   vec2 offset=vec2(hash(vec3(id,1.0)),hash(vec3(id,7.0)));
+   float dist=length(id+offset-cell);
+   if(dist<nearest){second=nearest;nearest=dist;mineral=hash(vec3(id,13.0));}
+   else{second=min(second,dist);}
+  }
+ }
+ float crevice=smoothstep(0.015,0.12,second-nearest);
+ vec3 aggregate=mix(vec3(0.76,0.73,0.66),vec3(1.12,1.11,1.05),mineral);
+ ALBEDO=stone_color.rgb*tint.rgb*aggregate*(0.55+0.45*crevice)*(0.83+0.25*grain);
  ROUGHNESS=0.94;
  NORMAL=normalize(NORMAL-vec3(dFdx(grain),dFdy(grain),0)*0.18);
 }

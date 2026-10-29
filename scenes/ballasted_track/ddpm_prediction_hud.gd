@@ -18,11 +18,14 @@ func _ready() -> void:
 	box.add_theme_constant_override("separation", 4)
 	add_child(box)
 	var title := Label.new()
-	title.text = "DDPM 在线预测 / forward_02"
+	title.text = "03 / DDPM 在线预测 · forward_02"
+	title.add_theme_color_override("font_color", Color("65c6cd"))
+	title.add_theme_font_size_override("font_size", 13)
 	box.add_child(title)
 	_label = Label.new()
 	_label.text = "等待 UDP 预测数据…"
-	_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_label.add_theme_font_size_override("font_size", 12)
 	box.add_child(_label)
 
 

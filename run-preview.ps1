@@ -1,5 +1,6 @@
 ﻿param(
-    [string]$GodotPath = 'E:\Godot_v4.7\Godot_v4.7-stable_win64_console.exe',
+    [string]$GodotPath = 'C:\GodotEngine\Godot_v4.7-stable_win64.exe\Godot_v4.7-stable_win64_console.exe',
+    # 'E:\Godot_v4.7\Godot_v4.7-stable_win64_console.exe',
     [ValidateSet('gl_compatibility', 'mobile', 'forward_plus')]
     [string]$Renderer = 'gl_compatibility',
     [switch]$SmokeTest,

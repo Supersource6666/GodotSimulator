@@ -1,11 +1,12 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
-uniform vec4 body_green : source_color = vec4(0.055, 0.38, 0.17, 1.0);
-uniform vec4 body_green_dark : source_color = vec4(0.02, 0.18, 0.075, 1.0);
-uniform vec4 stripe_yellow : source_color = vec4(0.91, 0.72, 0.08, 1.0);
-uniform vec4 roof_gray : source_color = vec4(0.56, 0.59, 0.57, 1.0);
-uniform vec4 window_blue : source_color = vec4(0.075, 0.25, 0.26, 1.0);
+uniform vec4 body_green : source_color = vec4(0.10, 0.24, 0.16, 1.0);
+uniform vec4 body_green_dark : source_color = vec4(0.065, 0.17, 0.105, 1.0);
+uniform vec4 stripe_yellow : source_color = vec4(0.69, 0.59, 0.33, 1.0);
+uniform vec4 roof_gray : source_color = vec4(0.38, 0.40, 0.38, 1.0);
+uniform vec4 window_blue : source_color = vec4(0.035, 0.075, 0.085, 1.0);
+uniform float car_variation = 0.0;
 uniform vec4 running_gear : source_color = vec4(0.035, 0.045, 0.043, 1.0);
 
 varying vec3 model_position;
@@ -17,9 +18,10 @@ void vertex() {
 void fragment() {
 	vec3 p = model_position;
 	float side = smoothstep(0.42, 0.51, abs(p.x));
-	vec3 color = mix(body_green_dark.rgb, body_green.rgb, 0.35 + 0.65 * max(NORMAL.y, 0.0));
-	float roughness = 0.68;
-	float metallic = 0.08;
+	vec3 color = mix(body_green_dark.rgb, body_green.rgb, 0.65);
+	color *= 1.0 + car_variation;
+	float roughness = 0.49;
+	float metallic = 0.025;
 
 	// Dark chassis, bogies and equipment below the body sill.
 	if (p.y < 0.55) {
@@ -30,8 +32,9 @@ void fragment() {
 
 	// Rounded roof and roof fittings remain weathered light gray.
 	if (p.y > 1.50) {
-		color = roof_gray.rgb * (0.82 + 0.18 * max(NORMAL.y, 0.0));
-		roughness = 0.78;
+		float streak = 0.5 + 0.5 * sin(p.z * 32.0 + sin(p.x * 18.0));
+		color = roof_gray.rgb * (0.86 + 0.10 * streak);
+		roughness = 0.84;
 		metallic = 0.18;
 	}
 
@@ -44,7 +47,7 @@ void fragment() {
 	color = mix(color, window_blue.rgb, window_mask * 0.96);
 	if (window_mask > 0.1) {
 		roughness = 0.24;
-		metallic = 0.12;
+		metallic = 0.0;
 	}
 
 	// Vestibule-door glazing near both ends.
@@ -62,6 +65,8 @@ void fragment() {
 	float gangway = step(3.91, abs(p.z)) * (1.0 - side) * step(0.58, p.y);
 	color = mix(color, running_gear.rgb * 0.72, gangway);
 
+	float dust = (1.0 - smoothstep(0.53, 0.84, p.y)) * smoothstep(0.40, 0.56, p.y);
+	color = mix(color, vec3(0.075, 0.065, 0.045), dust * 0.15);
 	ALBEDO = color;
 	ROUGHNESS = roughness;
 	METALLIC = metallic;

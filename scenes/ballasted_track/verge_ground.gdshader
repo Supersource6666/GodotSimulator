@@ -7,8 +7,10 @@ void vertex(){world=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;}
 void fragment(){
  float patch=noise(world.xz*0.35)*0.7+noise(world.xz*2.8)*0.3;
  float grain=noise(world.xz*160.0);
- vec3 grass=mix(vec3(0.067,0.087,0.030),vec3(0.145,0.166,0.066),patch);
- vec3 dirt=mix(vec3(0.24,0.185,0.115),vec3(0.38,0.31,0.21),patch);
- ALBEDO=(path?dirt:grass)*(0.93+grain*0.13);
+ vec3 grass=mix(vec3(0.10,0.12,0.065),vec3(0.23,0.235,0.145),patch);
+ vec3 dirt=mix(vec3(0.20,0.17,0.12),vec3(0.34,0.30,0.23),patch);
+ float bare=smoothstep(0.48,0.73,noise(world.xz*0.17+vec2(41.0,8.0)));
+ vec3 verge=mix(grass,dirt,bare*0.72);
+ ALBEDO=(path?dirt:verge)*(0.86+grain*0.24);
  ROUGHNESS=0.98;
 }

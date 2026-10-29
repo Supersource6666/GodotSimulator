@@ -36,14 +36,14 @@ func set_cab_view(enabled: bool) -> void:
 
 func _draw() -> void:
 	var bounds := Rect2(Vector2.ZERO, size)
-	draw_rect(bounds, Color(0.018, 0.045, 0.052, 0.90), true)
-	draw_rect(bounds.grow(-1.0), Color(0.34, 0.58, 0.60, 0.72), false, 1.0)
+	draw_rect(bounds, Color(0.055, 0.09, 0.125, 0.94), true)
+	draw_rect(bounds.grow(-1.0), Color("354b5c"), false, 1.0)
 	var font := get_theme_default_font()
-	var title := "SPEED CURVE  |  %6.1f km/h" % _current_speed_kmh
+	var title := "速度趋势  /  %5.1f km/h" % _current_speed_kmh
 	if _cab_view:
 		title += "  |  CAB"
 	draw_string(font, Vector2(16.0, 24.0), title,
-		HORIZONTAL_ALIGNMENT_LEFT, -1.0, 16, Color("e8f4ed"))
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, 14, Color("65c6cd"))
 
 	var plot := Rect2(Vector2(54.0, 38.0), Vector2(maxf(size.x - 70.0, 40.0),
 		maxf(size.y - 70.0, 40.0)))
@@ -67,7 +67,7 @@ func _draw() -> void:
 		draw_string(font, Vector2(x - 17.0, plot.end.y + 18.0), "-%02d" % int(seconds_ago),
 			HORIZONTAL_ALIGNMENT_CENTER, 34.0, 11, Color("8ea5a2"))
 	if _samples.size() < 2:
-		draw_string(font, plot.get_center() + Vector2(-62.0, 4.0), "Waiting for realtime speed...",
+		draw_string(font, plot.get_center() + Vector2(-62.0, 4.0), "等待实时速度数据",
 			HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13, Color("91aaa6"))
 		return
 	var latest_time := _samples[-1].x
@@ -78,7 +78,7 @@ func _draw() -> void:
 		var y_fraction := clampf(sample.y / speed_max, 0.0, 1.0)
 		points.append(Vector2(plot.position.x + plot.size.x * x_fraction,
 			plot.end.y - plot.size.y * y_fraction))
-	draw_polyline(points, Color("55e39a"), 2.4, true)
+	draw_polyline(points, Color("65c6cd"), 2.4, true)
 	draw_circle(points[-1], 3.8, Color("e7d34e"))
 
 

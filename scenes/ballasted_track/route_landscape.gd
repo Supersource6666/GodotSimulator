@@ -18,7 +18,7 @@ func configure(route, tree: Mesh, shrub: Mesh) -> void:
 	profile = route
 	var generator := Plants.new()
 	generator.rng.seed = 20261027
-	generator.leaf_density = 0.25
+	generator.leaf_density = 0.65
 	generator.summer_palette = true
 	for i in range(6):
 		var replacement := tree if i < 3 else shrub
@@ -65,17 +65,17 @@ func _build_chunk(index: int) -> void:
 	for i in range(7): buckets.append([])
 	for side in [-1.0, 1.0]:
 		for layer in range(3):
-			var count := int([28, 22, 16][layer] * density)
+			var count := int([18, 13, 11][layer] * density)
 			for i in range(count):
 				var distance := rng.randf_range(begin, end)
-				var lateral: float = side * rng.randf_range([6.0, 12.0, 24.0][layer], [10.0, 23.0, 40.0][layer])
+				var lateral: float = side * rng.randf_range([7.5, 16.0, 27.0][layer], [10.0, 23.0, 40.0][layer])
 				if side < 0: lateral -= 3.5
 				var pose: Transform3D = profile.pose_at_distance(distance, lateral, _bank_height(lateral, distance))
 				# Existing LY building and apron are world-aligned at the route origin.
 				if pose.origin.x < -6.0 and pose.origin.x > -32.0 and pose.origin.z > -28.0 and pose.origin.z < 8.0:
 					continue
 				var variant := rng.randi_range(3, 5) if layer == 0 or (layer == 1 and i % 2 == 0) else rng.randi_range(0, 2)
-				var scale := rng.randf_range(0.85, 1.55)
+				var scale := rng.randf_range(0.65, 1.25)
 				if layer == 1 and variant >= 3: scale *= 1.8
 				pose.basis = pose.basis.rotated(Vector3.UP, rng.randf() * TAU).scaled(Vector3(scale, scale * rng.randf_range(0.8, 1.1), scale))
 				buckets[variant].append(pose)
