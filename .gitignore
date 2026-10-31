@@ -1,7 +1,14 @@
 # Godot 4 editor/import cache. Keep source-side *.import and *.uid files tracked.
 .godot/
 .mono/
+.import/
+.export/
+export.cfg
+# Godot 4 export_presets.cfg is shareable; credentials live in .godot/.
 *.translation
+# Godot-generated Android build template and Gradle state.
+/android/build/
+.gradle/
 # Godot shader caches created by some renderer/driver configurations.
 /shader_cache/
 
@@ -26,6 +33,10 @@ export_credentials.cfg
 /CTestTestfile.cmake
 /cmake_install.cmake
 /compile_commands.json
+CMakeUserPresets.json
+.cache/
+.sconsign.dblite
+.sconsign*.dblite
 *.o
 *.pdb
 *.ilk
@@ -45,6 +56,8 @@ export_credentials.cfg
 *.key
 *.p12
 *.pfx
+*.keystore
+*.jks
 
 # Runtime state, logs, dumps and generated output.
 /appdata/
